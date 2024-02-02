@@ -16,7 +16,7 @@ export default function Navbar() {
         localStorage.removeItem('accessToken'); // Clear the stored token
         localStorage.removeItem('userId'); // Also clear the stored user ID
         setIsOpen(false);
-        navigate('/'); // Redirect to the login page
+        navigate('/');
     };
 
     return (
