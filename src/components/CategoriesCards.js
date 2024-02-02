@@ -8,6 +8,8 @@ const CategoriesCards = () => {
     const [categories, setCategories] = useState([]);
     const navigate = useNavigate();
 
+    const userId = localStorage.getItem('userId');
+
 
     useEffect(() => {
         axios.get('http://0000:8055/items/category?fields=*')
@@ -60,7 +62,7 @@ const Card = ({ heading, imgSrc, onClick }) => {
                 className="absolute inset-0 md:group-hover:saturate-100 group-hover:scale-110 transition-all duration-500"
                 style={{ backgroundImage: `url(${imgSrc})`, backgroundSize: "cover", backgroundPosition: "center" }}
             />
-            <div className="p-4 relative z-20 h-full text-slate-300 group-hover:text-white transition-colors duration-500 flex flex-col justify-between">
+            <div className="p-4 relative z-20 h-full text-white group-hover:text-white transition-colors duration-500 flex flex-col justify-between">
                 <FiArrowRight className="text-3xl group-hover:-rotate-45 transition-transform duration-500 ml-auto" />
                 <h4>
                     {heading.split("").map((l, i) => (
@@ -75,15 +77,9 @@ const Card = ({ heading, imgSrc, onClick }) => {
 const ShiftLetter = ({ letter }) => {
     return (
         <div className="inline-block overflow-hidden h-[36px] font-semibold text-3xl">
-            <motion.span
-                className="flex flex-col min-w-[4px]"
-                style={{ y: "0%" }}
-                variants={{ hover: { y: "-50%" } }}
-                transition={{ duration: 0.5 }}
-            >
-                <span>{letter}</span>
-                <span>{letter}</span>
-            </motion.span>
+
+            <span>{letter}</span>
+
         </div>
     );
 };

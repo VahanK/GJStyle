@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { useUser } from '../providers/UserProvider';
+import { jwtDecode } from "jwt-decode";
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const navigate = useNavigate(); // Initialize useNavigate
+    const navigate = useNavigate();
+    const { updateUserId } = useUser(); // Use the context to update the user ID
 
     const handleEmailChange = (e) => setEmail(e.target.value);
     const handlePasswordChange = (e) => setPassword(e.target.value);
@@ -13,19 +16,26 @@ export default function LoginScreen() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const response = await axios.post('http://localhost:8055/auth/login', {
+            const loginResponse = await axios.post('http://localhost:8055/auth/login', {
                 email: email,
                 password: password
             });
-            // Handle successful login
-            if (response.status === 200) {
-                navigate('/categories'); // Redirect to Categories page
+
+            if (loginResponse.status === 200) {
+                const token = loginResponse.data.data.access_token;
+                const decoded = jwtDecode(token);
+                const userId = decoded.id;
+                localStorage.setItem('userId', userId); // Save to local storage
+
+                updateUserId(userId);
+                navigate('/categories');
             }
-            // You can handle other statuses or responses as needed
         } catch (error) {
-            // Handle error here
+            console.error('Login or fetching user error:', error);
         }
-    }
+    };
+
+
 
     return (
         <section className="bg-purple-900 h-screen">

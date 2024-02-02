@@ -30,7 +30,7 @@ const ProductsPage = () => {
                     url += `&filter[subcategory]=${subcategoryId}`;
                 }
 
-                const response = await axios.get(url);
+                const response = await axios.get(url)
                 setProducts(response.data.data);
                 setIsLoading(false);
             } catch (error) {
