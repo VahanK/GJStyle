@@ -23,7 +23,7 @@ export default function Cart() {
         const fetchCartData = async () => {
             try {
 
-                const response = await axios.get(`http://0000:8055/items/cart?fields=*,cart_details.*,cart_details.product.*,cart_details.product.category.*,cart_details.product.images.*&filter[user][_eq]=${userId}`);
+                const response = await axios.get(`http://backoffice.gjstylelb.com/items/cart?fields=*,cart_details.*,cart_details.product.*,cart_details.product.category.*,cart_details.product.images.*&filter[user][_eq]=${userId}`);
                 const cartData = response.data.data[0].cart_details;
 
                 const transformedProducts = cartData.map(detail => ({
@@ -35,7 +35,7 @@ export default function Cart() {
                     cartDetailId: detail.id,
                     color: detail.plating_color,
                     stoneColor: detail.stone_color,
-                    imageSrc: `http://0000:8055/assets/${detail.product.images[0].directus_files_id}`,
+                    imageSrc: `http://backoffice.gjstylelb.com/assets/${detail.product.images[0].directus_files_id}`,
                     imageAlt: detail.product.Description,
                     quantity: parseInt(detail.quantity)
                 }));
@@ -55,7 +55,7 @@ export default function Cart() {
             for (const product of cartProducts) {
                 // Construct the endpoint for deleting individual cart detail item
                 // Assuming the endpoint requires the cartDetailId for deletion
-                const deleteEndpoint = `http://0000:8055/items/cart_details/${product.cartDetailId}`;
+                const deleteEndpoint = `http://backoffice.gjstylelb.com/items/cart_details/${product.cartDetailId}`;
 
                 // Make the API call to delete the cart item
                 await axios.delete(deleteEndpoint);
@@ -76,7 +76,7 @@ export default function Cart() {
         try {
 
             // Directly create a new order
-            let newOrderResponse = await axios.post('http://0000:8055/items/Order', {
+            let newOrderResponse = await axios.post('http://backoffice.gjstylelb.com/items/order', {
                 user: userId,
                 status: 'draft' // Set initial order status
             });
@@ -95,7 +95,7 @@ export default function Cart() {
                         plating_color: product.color,
                         stone_color: product.stoneColor
                     };
-                    const response = await axios.post('http://0000:8055/items/order_details', orderData);
+                    const response = await axios.post('http://backoffice.gjstylelb.com/items/order_details', orderData);
                 } catch (error) {
                     console.error(`Error adding product ${product.id} to order:`, error);
                 }
@@ -155,7 +155,7 @@ export default function Cart() {
                 };
 
 
-                await axios.patch(`http://0000:8055/items/cart_details/${product.cartDetailId}`, updatePayload);
+                await axios.patch(`http://backoffice.gjstylelb.com/items/cart_details/${product.cartDetailId}`, updatePayload);
             }
             setHasUnsavedChanges(false);
             setModifiedItems([]);
@@ -175,7 +175,7 @@ export default function Cart() {
 
         setCartProducts(currentProducts => currentProducts.filter(product => product.cartDetailId !== cartDetailId));
         // Optional: Make an API call to remove the item from the backend
-        axios.delete(`http://0000:8055/items/cart_details/${cartDetailId}`)
+        axios.delete(`http://backoffice.gjstylelb.com/items/cart_details/${cartDetailId}`)
             .then(response => {
             })
             .catch(error => {

@@ -21,7 +21,7 @@ const ProductsPage = () => {
     useEffect(() => {
         const fetchProducts = async () => {
             try {
-                let url = `http://localhost:8055/items/Products?fields=*,images.*`;
+                let url = `http://backoffice.gjstylelb.com/items/products?fields=*,images.*`;
 
                 if (categoryId) {
                     url += `&filter[category]=${categoryId}`;
@@ -64,9 +64,9 @@ const ProductsPage = () => {
                             <div className="aspect-h-4 aspect-w-3 bg-gray-200 sm:aspect-none group-hover:opacity-75 sm:h-96">
                                 <img
 
-                                    src={`http://0000:8055/assets/${product.images[0].directus_files_id}`}
+                                    src={`http://backoffice.gjstylelb.com/assets/${product.images[0].directus_files_id}`}
 
-                                    alt={`http://0000:8055/assets/${product.images[0].directus_files_id}`}
+                                    alt={`http://backoffice.gjstylelb.com/assets/${product.images[0].directus_files_id}`}
                                     className="h-full w-full object-cover object-center sm:h-full sm:w-full"
                                 />
                             </div>
