@@ -12,7 +12,7 @@ const CategoriesCards = () => {
 
 
     useEffect(() => {
-        axios.get('http://backoffice.gjstylelb.com/items/category?fields=*')
+        axios.get('https://backoffice.gjstylelb.com/items/category?fields=*')
             .then(response => {
                 setCategories(response.data.data || []);
             })
@@ -41,7 +41,7 @@ const CategoriesCards = () => {
                     <Card
                         key={category.id}
                         heading={category.title}
-                        imgSrc={`http://backoffice.gjstylelb.com/assets/${category.image}`}
+                        imgSrc={`https://backoffice.gjstylelb.com/assets/${category.image}`}
                         onClick={() => handleCardClick(category)}
                     />
                 ))}

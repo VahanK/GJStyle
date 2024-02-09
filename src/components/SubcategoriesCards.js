@@ -9,7 +9,7 @@ const SubcategoriesCards = ({ categoryId }) => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        axios.get(`http://backoffice.gjstylelb.com/items/subcategory?fields=*&filter[category][_eq]=${categoryId}`)
+        axios.get(`https://backoffice.gjstylelb.com/items/subcategory?fields=*&filter[category][_eq]=${categoryId}`)
             .then(response => {
                 const fetchedSubcategories = response.data.data || [];
                 if (fetchedSubcategories.length === 0) {
@@ -38,7 +38,7 @@ const SubcategoriesCards = ({ categoryId }) => {
                     <Card
                         key={subcategory.id}
                         heading={subcategory.title}
-                        imgSrc={`http://backoffice.gjstylelb.com/assets/${subcategory.image}`}
+                        imgSrc={`https://backoffice.gjstylelb.com/assets/${subcategory.image}`}
                         onClick={() => handleCardClick(subcategory)}
                     />
                 ))}

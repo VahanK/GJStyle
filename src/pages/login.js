@@ -16,7 +16,7 @@ export default function LoginScreen() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const loginResponse = await axios.post('http://68.66.251.150/auth/login', {
+            const loginResponse = await axios.post('https://backoffice.gjstylelb.com/auth/login', {
                 email: email,
                 password: password
             });

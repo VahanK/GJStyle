@@ -82,7 +82,7 @@ export default function ProductDetail() {
     useEffect(() => {
         const fetchProduct = async () => {
             try {
-                const response = await axios.get(`http://backoffice.gjstylelb.com/items/products?fields=*,images.*&filter[id]=${productId}`);
+                const response = await axios.get(`https://backoffice.gjstylelb.com/items/products?fields=*,images.*&filter[id]=${productId}`);
                 if (response.data && response.data.data) {
                     const fetchedProduct = response.data.data[0];
                     setProduct(fetchedProduct);
@@ -109,12 +109,12 @@ export default function ProductDetail() {
         try {
 
             // Fetch the current cart details
-            let cartResponse = await axios.get(`http://backoffice.gjstylelb.com/items/cart?filter[user]=${userId}`);
+            let cartResponse = await axios.get(`https://backoffice.gjstylelb.com/items/cart?filter[user]=${userId}`);
             let cartId = cartResponse.data && cartResponse.data.data && cartResponse.data.data.length > 0 ? cartResponse.data.data[0].id : null;
 
 
             if (!cartId) {
-                let newCartResponse = await axios.post('http://backoffice.gjstylelb.com/items/cart', {
+                let newCartResponse = await axios.post('https://backoffice.gjstylelb.com/items/cart', {
                     user: userId,
                     status: 'draft'
                 });
@@ -122,7 +122,7 @@ export default function ProductDetail() {
             }
 
             // Fetch the cart details
-            let cartDetailsResponse = await axios.get(`http://backoffice.gjstylelb.com/items/cart_details?filter[cart]=${cartId}`);
+            let cartDetailsResponse = await axios.get(`https://backoffice.gjstylelb.com/items/cart_details?filter[cart]=${cartId}`);
             let cartDetails = cartDetailsResponse.data.data;
 
 
@@ -143,7 +143,7 @@ export default function ProductDetail() {
                 // Convert both quantities to numbers before adding
                 let updatedQuantity = (parseInt(existingItem.quantity, 10) || 0) + (parseInt(quantity, 10) || 0);
 
-                await axios.patch(`http://backoffice.gjstylelb.com/items/cart_details/${existingItem.id}`, {
+                await axios.patch(`https://backoffice.gjstylelb.com/items/cart_details/${existingItem.id}`, {
                     quantity: updatedQuantity
                 });
 
@@ -158,7 +158,7 @@ export default function ProductDetail() {
                     stone_color: selectedStoneColor
                 };
 
-                await axios.post('http://backoffice.gjstylelb.com/items/cart_details', productData);
+                await axios.post('https://backoffice.gjstylelb.com/items/cart_details', productData);
             }
         } catch (error) {
             console.error('Error adding to bag:', error);
@@ -174,7 +174,7 @@ export default function ProductDetail() {
     }
 
     // Image processing
-    const baseUrl = 'http://backoffice.gjstylelb.com/assets/';
+    const baseUrl = 'https://backoffice.gjstylelb.com/assets/';
     const images = product.images.map(image => ({
         src: `${baseUrl}${image.directus_files_id}`,
         alt: product.title

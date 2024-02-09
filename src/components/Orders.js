@@ -16,7 +16,7 @@ export default function Orders() {
     const userId = localStorage.getItem('userId');
 
     useEffect(() => {
-        fetch(`http://backoffice.gjstylelb.com/items/order?fields=*,order_details.*,order_details.product.*,order_details.product.category.*,order_details.product.images.*,images.url&filter[user][_eq]=${userId}`)
+        fetch(`https://backoffice.gjstylelb.com/items/order?fields=*,order_details.*,order_details.product.*,order_details.product.category.*,order_details.product.images.*,images.url&filter[user][_eq]=${userId}`)
             .then(response => response.json())
             .then(data => {
                 const sortedOrders = data.data.sort((a, b) => new Date(b.date_created) - new Date(a.date_created));
@@ -138,8 +138,8 @@ export function OrderDetailsModal({ order, onClose }) {
                                             {order.order_details.map((detail, index) => (
                                                 <li key={detail.id} className="flex py-8 text-sm sm:items-center">
                                                     <img
-                                                        src={`http://backoffice.gjstylelb.com/assets/${detail.product.images[0].directus_files_id}`}
-                                                        alt={`http://backoffice.gjstylelb.com/assets/${detail.product.images[0].directus_files_id}`}
+                                                        src={`https://backoffice.gjstylelb.com/assets/${detail.product.images[0].directus_files_id}`}
+                                                        alt={`https://backoffice.gjstylelb.com/assets/${detail.product.images[0].directus_files_id}`}
                                                         className="h-24 w-24 flex-none rounded-lg border border-gray-200 sm:h-32 sm:w-32"
                                                     />
                                                     <div className="ml-4 grid flex-auto grid-cols-1 grid-rows-1 items-start gap-x-5 gap-y-3 sm:ml-6 sm:flex sm:items-center sm:gap-0">
