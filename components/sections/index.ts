@@ -1,0 +1,6 @@
+export { Hero } from './Hero'
+export { Introduction } from './Introduction'
+export { OurStory } from './OurStory'
+export { Material } from './Material'
+export { Shipping } from './Shipping'
+export { Contact } from './Contact'

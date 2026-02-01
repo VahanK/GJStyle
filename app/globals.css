@@ -1,0 +1,145 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Brand colors - UPDATE THESE when final logo/branding arrives */
+  --color-brand-primary: #D4AF37;
+  --color-brand-light: #FAF4ED;
+  --color-brand-dark: #8A6E17;
+
+  /* Text colors */
+  --color-text-primary: #171717;
+  --color-text-secondary: #737373;
+  --color-text-tertiary: #A3A3A3;
+
+  /* Background colors */
+  --color-background: #FFFFFF;
+  --color-background-alt: #FAFAFA;
+  --color-background-dark: #171717;
+
+  /* Functional */
+  --color-whatsapp: #25D366;
+  --color-instagram: #E4405F;
+  --color-border: #E5E5E5;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--color-text-primary);
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Smooth scroll for Lenis */
+html.lenis {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-brand-primary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brand-dark);
+}
+
+/* Selection color */
+::selection {
+  background-color: var(--color-brand-primary);
+  color: white;
+}
+
+/* Focus styles */
+:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* Prose styles */
+.prose {
+  max-width: 65ch;
+}
+
+.prose p {
+  margin-bottom: 1em;
+}
+
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+/* Button hover effects */
+.btn-hover-fill {
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.btn-hover-fill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-brand-primary);
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.3s ease-out;
+  z-index: -1;
+}
+
+.btn-hover-fill:hover::before {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+/* Image hover zoom */
+.img-hover-zoom {
+  overflow: hidden;
+}
+
+.img-hover-zoom img {
+  transition: transform 0.6s ease-out;
+}
+
+.img-hover-zoom:hover img {
+  transform: scale(1.05);
+}
