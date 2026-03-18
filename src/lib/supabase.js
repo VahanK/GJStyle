@@ -1,6 +1,7 @@
 const SUPABASE_URL = 'https://ntlistqtcapssgfebxvc.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im50bGlzdHF0Y2Fwc3NnZmVieHZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NzY5OTMsImV4cCI6MjA4OTI1Mjk5M30.92TYInIQg--yFrsc8DL6mc9feJAT052CINwG6MEjzHw';
 
+
 export const HEADERS = {
   apikey: SUPABASE_KEY,
   Authorization: `Bearer ${SUPABASE_KEY}`,
