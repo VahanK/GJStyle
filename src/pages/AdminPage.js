@@ -647,14 +647,20 @@ function ProductsTab() {
   const allPlatingSuggestions = [...new Set([...DEFAULT_PLATINGS, ...products.flatMap((p) => p.plating || [])])].sort();
   const allStoneSuggestions = [...new Set([...DEFAULT_STONES, ...products.flatMap((p) => p.stones || [])])].sort();
 
+  // A product "needs stones" if any of its subcategories mention "stone"
+  function needsStones(p) {
+    return (p.sub_categories || []).some((s) => /stone/i.test(s));
+  }
+
   const filtered = products.filter((p) => {
     const matchCat = catFilter === 'All' || p.category === catFilter;
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
-    const matchMissing = !missingOnly || !p.price || !(p.plating?.length) || !(p.stones?.length);
+    const missingStonesFlag = needsStones(p) && !(p.stones?.length);
+    const matchMissing = !missingOnly || !p.price || !(p.plating?.length) || missingStonesFlag;
     return matchCat && matchSearch && matchMissing;
   });
 
-  const missingCount = products.filter((p) => !p.price || !(p.plating?.length) || !(p.stones?.length)).length;
+  const missingCount = products.filter((p) => !p.price || !(p.plating?.length) || (needsStones(p) && !(p.stones?.length))).length;
   const categories = ['All', ...Array.from(new Set(products.map((p) => p.category))).sort()];
 
   function openEdit(p, index) {
@@ -774,7 +780,7 @@ function ProductsTab() {
         {filtered.map((p, index) => {
           const missingPrice = !p.price;
           const missingPlating = !(p.plating?.length);
-          const missingStones = !(p.stones?.length);
+          const missingStones = needsStones(p) && !(p.stones?.length);
           const hasMissing = missingPrice || missingPlating || missingStones;
           return (
           <div key={p.id} className={`group bg-white rounded-xl border shadow-sm overflow-hidden ${hasMissing ? 'border-amber-200' : 'border-gray-100'}`}>
@@ -786,9 +792,12 @@ function ProductsTab() {
             <div className="p-3">
               <p className="text-sm font-semibold text-gray-800 truncate mb-1">{p.name}</p>
               <p className="text-xs text-gray-400 mb-1">{p.category}</p>
-              <p className="text-sm font-bold text-gray-900 mb-2">
+              <p className="text-sm font-bold text-gray-900 mb-1">
                 {p.price ? `$${Number(p.price).toFixed(2)}` : <span className="text-xs text-amber-500 font-normal italic">No price</span>}
               </p>
+              {missingStones && (
+                <p className="text-xs text-amber-500 italic mb-1">No stone colors</p>
+              )}
               <div className="flex gap-2">
                 <button onClick={() => openEdit(p, index)}
                   className="flex-1 flex items-center justify-center gap-1 rounded-lg border border-gray-200 py-1.5 text-xs text-gray-600 hover:bg-gray-50">
@@ -828,9 +837,9 @@ function ProductsTab() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Product Image</label>
                 <div className="flex items-center gap-4">
-                  <div className="h-20 w-20 rounded-xl overflow-hidden bg-gray-50 border border-gray-200 flex-shrink-0">
+                  <div className="h-36 w-36 rounded-xl overflow-hidden bg-gray-50 border border-gray-200 flex-shrink-0">
                     {editing.image_url
-                      ? <img src={editing.image_url} alt="" className="h-full w-full object-cover" />
+                      ? <img src={editing.image_url} alt="" className="h-full w-full object-contain" />
                       : <div className="h-full flex items-center justify-center text-2xl opacity-20">💍</div>}
                   </div>
                   <button onClick={() => fileInputRef.current?.click()}
