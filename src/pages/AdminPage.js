@@ -633,12 +633,14 @@ function ProductsTab() {
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('All');
   const [missingOnly, setMissingOnly] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
   const [editing, setEditing] = useState(null);
   const [editingIndex, setEditingIndex] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [localProducts, setLocalProducts] = useState(null);
+  const [variantSearch, setVariantSearch] = useState('');
   const fileInputRef = useRef(null);
 
   const products = localProducts || source;
@@ -652,7 +654,12 @@ function ProductsTab() {
     return (p.sub_categories || []).some((s) => /stone/i.test(s));
   }
 
+  // In normal view: hide deleted and hide variants (parent_id set)
+  // showDeleted: show only deleted products
   const filtered = products.filter((p) => {
+    if (showDeleted) return !!p.deleted_at;
+    if (p.deleted_at) return false;
+    if (p.parent_id) return false; // variants hidden from main list
     const matchCat = catFilter === 'All' || p.category === catFilter;
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
     const missingStonesFlag = needsStones(p) && !(p.stones?.length);
@@ -660,8 +667,8 @@ function ProductsTab() {
     return matchCat && matchSearch && matchMissing;
   });
 
-  const missingCount = products.filter((p) => !p.price || !(p.plating?.length) || (needsStones(p) && !(p.stones?.length))).length;
-  const categories = ['All', ...Array.from(new Set(products.map((p) => p.category))).sort()];
+  const missingCount = products.filter((p) => !p.deleted_at && !p.parent_id && (!p.price || !(p.plating?.length) || (needsStones(p) && !(p.stones?.length)))).length;
+  const categories = ['All', ...Array.from(new Set(products.filter(p => !p.deleted_at).map((p) => p.category))).sort()];
 
   function openEdit(p, index) {
     const allSubcats = [...new Set(products.filter((x) => x.category === p.category).flatMap((x) => x.sub_categories || []))].sort();
@@ -673,6 +680,7 @@ function ProductsTab() {
       _allSubcats: allSubcats,
     });
     setEditingIndex(index ?? filtered.findIndex((x) => x.id === p.id));
+    setVariantSearch('');
   }
 
   function goNext() {
@@ -763,9 +771,13 @@ function ProductsTab() {
             className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none">
             {categories.map((c) => <option key={c}>{c}</option>)}
           </select>
-          <button onClick={() => setMissingOnly((v) => !v)}
+          <button onClick={() => { setMissingOnly((v) => !v); setShowDeleted(false); }}
             className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${missingOnly ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-600 border-amber-300 hover:bg-amber-50'}`}>
             ⚠ Missing data {missingOnly ? `(${filtered.length})` : `(${missingCount})`}
+          </button>
+          <button onClick={() => { setShowDeleted((v) => !v); setMissingOnly(false); }}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${showDeleted ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'}`}>
+            🗑 Deleted {showDeleted ? `(${filtered.length})` : ''}
           </button>
           <span className="text-sm text-gray-400">{filtered.length} products</span>
         </div>
@@ -798,16 +810,25 @@ function ProductsTab() {
               {missingStones && (
                 <p className="text-xs text-amber-500 italic mb-1">No stone colors</p>
               )}
-              <div className="flex gap-2">
-                <button onClick={() => openEdit(p, index)}
-                  className="flex-1 flex items-center justify-center gap-1 rounded-lg border border-gray-200 py-1.5 text-xs text-gray-600 hover:bg-gray-50">
-                  <PencilSquareIcon className="h-3.5 w-3.5" /> Edit
+              {p.deleted_at ? (
+                <button onClick={async () => {
+                  await updateProduct(p.id, { deleted_at: null });
+                  setLocalProducts((prev) => (prev || source).map((x) => x.id === p.id ? { ...x, deleted_at: null } : x));
+                }} className="w-full rounded-lg border border-green-300 py-1.5 text-xs text-green-700 hover:bg-green-50">
+                  ↩ Restore
                 </button>
-                <button onClick={() => setDeleteConfirm(p)}
-                  className="rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200">
-                  <TrashIcon className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button onClick={() => openEdit(p, index)}
+                    className="flex-1 flex items-center justify-center gap-1 rounded-lg border border-gray-200 py-1.5 text-xs text-gray-600 hover:bg-gray-50">
+                    <PencilSquareIcon className="h-3.5 w-3.5" /> Edit
+                  </button>
+                  <button onClick={() => setDeleteConfirm(p)}
+                    className="rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200">
+                    <TrashIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           );
@@ -908,6 +929,83 @@ function ProductsTab() {
                 <textarea value={editing.notes || ''} rows={2}
                   onChange={(e) => setEditing((ed) => ({ ...ed, notes: e.target.value }))}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none resize-none" />
+              </div>
+
+              {/* Variants */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Variant Images</label>
+                {/* Current variants linked to this product */}
+                {(() => {
+                  const linkedVariants = products.filter((p) => p.parent_id === editing.id && !p.deleted_at);
+                  return linkedVariants.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {linkedVariants.map((v) => (
+                        <div key={v.id} className="relative group">
+                          <div className="h-16 w-16 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                            {v.image_url
+                              ? <img src={v.image_url} alt={v.name} className="h-full w-full object-contain" />
+                              : <div className="h-full flex items-center justify-center text-xs text-gray-300">No img</div>}
+                          </div>
+                          <p className="text-xs text-gray-400 text-center mt-0.5 w-16 truncate">{v.name}</p>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await updateProduct(v.id, { parent_id: null });
+                              setLocalProducts((prev) => (prev || source).map((x) => x.id === v.id ? { ...x, parent_id: null } : x));
+                            }}
+                            className="absolute -top-1 -right-1 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white text-xs leading-none">
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null;
+                })()}
+                {/* Link a variant — search by same category + subcategory */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={variantSearch}
+                    onChange={(e) => setVariantSearch(e.target.value)}
+                    placeholder="Search to link a variant…"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+                  />
+                  {variantSearch.trim().length > 0 && (() => {
+                    const results = products.filter((p) =>
+                      p.id !== editing.id &&
+                      !p.deleted_at &&
+                      p.category === editing.category &&
+                      (p.sub_categories || []).some((s) => (editing.sub_categories || []).includes(s)) &&
+                      p.name.toLowerCase().includes(variantSearch.toLowerCase()) &&
+                      !p.parent_id
+                    ).slice(0, 8);
+                    return results.length > 0 ? (
+                      <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-48 overflow-y-auto">
+                        {results.map((p) => (
+                          <button key={p.id} type="button"
+                            onClick={async () => {
+                              await updateProduct(p.id, { parent_id: editing.id });
+                              setLocalProducts((prev) => (prev || source).map((x) => x.id === p.id ? { ...x, parent_id: editing.id } : x));
+                              setVariantSearch('');
+                            }}
+                            className="flex items-center gap-3 w-full px-3 py-2 text-sm text-left hover:bg-gray-50">
+                            <div className="h-8 w-8 rounded overflow-hidden bg-gray-100 flex-shrink-0">
+                              {p.image_url
+                                ? <img src={p.image_url} alt={p.name} className="h-full w-full object-contain" />
+                                : <div className="h-full flex items-center justify-center text-xs text-gray-300">?</div>}
+                            </div>
+                            <span className="font-medium text-gray-800">{p.name}</span>
+                            <span className="text-gray-400 text-xs ml-auto">{p.category}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-sm px-3 py-2 text-sm text-gray-400">
+                        No matching products in same category/subcategory
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
 

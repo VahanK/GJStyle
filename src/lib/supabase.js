@@ -30,8 +30,12 @@ export async function updateProduct(id, data) {
   });
 }
 
+// Soft delete — sets deleted_at instead of hard delete
 export async function deleteProduct(id) {
-  return sbFetch(`/products?id=eq.${id}`, { method: 'DELETE' });
+  return sbFetch(`/products?id=eq.${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ deleted_at: new Date().toISOString() }),
+  });
 }
 
 export async function createProduct(data) {

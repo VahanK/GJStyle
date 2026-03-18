@@ -39,7 +39,7 @@ function AppInner() {
         let from = 0;
         while (true) {
           const res = await fetch(
-            `https://ntlistqtcapssgfebxvc.supabase.co/rest/v1/products?select=id,name,category,sub_categories,plating,stones,image_url,price,notes&order=id.asc`,
+            `https://ntlistqtcapssgfebxvc.supabase.co/rest/v1/products?select=id,name,category,sub_categories,plating,stones,image_url,extra_images,price,notes,parent_id,deleted_at&order=id.asc`,
             {
               headers: {
                 apikey: ANON_KEY,
@@ -58,8 +58,11 @@ function AppInner() {
           if (rows.length < PAGE) break;
           from += PAGE;
         }
+        // allProducts = everything (admin needs deleted + variants)
+        // activeProducts = no deleted, no variants (catalog + clients)
         setProducts(all);
         setProductsLoading(false);
+
       } catch (e) {
         console.error('Failed to load products', e);
         setLoadError(e.message || 'Connection failed');
@@ -93,25 +96,25 @@ function AppInner() {
     );
   }
 
+  // Active products: exclude soft-deleted and variants (parent_id set)
+  const activeProducts = products.filter((p) => !p.deleted_at && !p.parent_id);
+
   // Filter products based on logged-in client's visibility
   function getVisibleProducts() {
-    if (!client) return products;
-    if (client.isAdmin) return products;
+    if (!client) return activeProducts;
+    if (client.isAdmin) return activeProducts;
     const allowedCats = client.allowed_categories || [];
     const allowedSubs = client.allowed_subcategories || [];
     const allowedIds = client.allowed_product_ids || [];
 
     if (allowedCats.length === 0 && allowedIds.length === 0) return [];
 
-    return products.filter((p) => {
-      // Direct product ID access
+    return activeProducts.filter((p) => {
       if (allowedIds.includes(p.id)) return true;
-      // Category access
       if (allowedCats.includes(p.category)) {
-        // If subcats are specified for this category, filter further
         const catSubs = (p.sub_categories || []);
         const clientCatSubs = allowedSubs.filter((s) =>
-          [...(new Set(products.filter((x) => x.category === p.category).flatMap((x) => x.sub_categories || [])))].includes(s)
+          [...(new Set(activeProducts.filter((x) => x.category === p.category).flatMap((x) => x.sub_categories || [])))].includes(s)
         );
         if (clientCatSubs.length > 0) {
           return catSubs.some((s) => allowedSubs.includes(s));
@@ -122,9 +125,10 @@ function AppInner() {
     });
   }
 
-  const visibleProducts = client ? getVisibleProducts() : products;
+  const visibleProducts = client ? getVisibleProducts() : activeProducts;
 
   return (
+    // allProducts = everything including deleted/variants (admin only)
     <ProductsContext.Provider value={{ products: visibleProducts, allProducts: products }}>
       <CartProvider>
         <Router>

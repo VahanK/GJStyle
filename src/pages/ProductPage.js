@@ -26,15 +26,21 @@ function emptyVariant() {
 
 export default function ProductPage() {
   const { id } = useParams();
-  const { products } = useProducts();
+  const { products, allProducts } = useProducts();
   const { addItem, totalItems } = useCart();
   const navigate = useNavigate();
 
   const product = products.find((p) => String(p.id) === String(id));
 
+  // Variant images: other products linked to this one (parent_id = product.id)
+  const variantImages = product
+    ? (allProducts || products).filter((p) => p.parent_id === product.id && !p.deleted_at && p.image_url)
+    : [];
+
   // Multiple variants — each row = one plating+stone+qty combo
   const [variants, setVariants] = useState([emptyVariant()]);
   const [added, setAdded] = useState(false);
+  const [activeImage, setActiveImage] = useState(null); // null = main image
 
   if (!product) {
     return (
@@ -96,12 +102,31 @@ export default function ProductPage() {
         </Link>
 
         <div className="grid gap-10 md:grid-cols-2">
-          {/* Image */}
-          <div className="aspect-square overflow-hidden rounded-2xl bg-gray-50">
-            {product.image_url ? (
-              <img src={product.image_url} alt={product.name} className="h-full w-full object-contain" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-6xl opacity-20">💍</div>
+          {/* Image + variant gallery */}
+          <div>
+            <div className="aspect-square overflow-hidden rounded-2xl bg-gray-50 mb-3">
+              {(activeImage || product.image_url) ? (
+                <img src={activeImage || product.image_url} alt={product.name} className="h-full w-full object-contain" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-6xl opacity-20">💍</div>
+              )}
+            </div>
+            {variantImages.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {/* Main image thumb */}
+                {product.image_url && (
+                  <button onClick={() => setActiveImage(null)}
+                    className={`h-14 w-14 rounded-lg overflow-hidden border-2 transition-colors ${!activeImage ? 'border-gray-900' : 'border-gray-200 hover:border-gray-400'}`}>
+                    <img src={product.image_url} alt="main" className="h-full w-full object-contain" />
+                  </button>
+                )}
+                {variantImages.map((v) => (
+                  <button key={v.id} onClick={() => setActiveImage(v.image_url)}
+                    className={`h-14 w-14 rounded-lg overflow-hidden border-2 transition-colors ${activeImage === v.image_url ? 'border-gray-900' : 'border-gray-200 hover:border-gray-400'}`}>
+                    <img src={v.image_url} alt={v.name} className="h-full w-full object-contain" />
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 
@@ -122,7 +147,7 @@ export default function ProductPage() {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">{product.name}</h1>
 
             {product.price && (
-              <p className="text-xl font-semibold text-gray-900 mb-4">${product.price.toFixed(2)}</p>
+              <p className="text-xl font-semibold text-gray-900 mb-4">${Math.round(product.price)}</p>
             )}
 
             {product.notes && (
