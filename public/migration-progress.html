@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GJ Style — Migration Progress</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f9; color: #111; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: white; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); padding: 48px; width: 100%; max-width: 560px; }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 36px; }
+    .stat-row { display: flex; justify-content: space-between; margin-bottom: 28px; }
+    .stat { text-align: center; }
+    .stat .value { font-size: 28px; font-weight: 700; }
+    .stat .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+    .stat .value.green { color: #16a34a; }
+    .stat .value.red { color: #dc2626; }
+    .stat .value.blue { color: #2563eb; }
+    .progress-wrap { margin-bottom: 12px; }
+    .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: #888; margin-bottom: 8px; }
+    .bar-bg { height: 8px; background: #f0f0f0; border-radius: 99px; overflow: hidden; }
+    .bar-fill { height: 100%; background: #111; border-radius: 99px; transition: width 0.4s ease; }
+    .bar-fill.done { background: #16a34a; }
+    .status-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 99px; padding: 4px 12px; font-size: 12px; font-weight: 500; margin-bottom: 28px; }
+    .status-pill.running { background: #eff6ff; color: #2563eb; }
+    .status-pill.done { background: #f0fdf4; color: #16a34a; }
+    .status-pill.waiting { background: #fafafa; color: #888; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 1.2s infinite; }
+    .done .dot, .waiting .dot { animation: none; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .log { background: #f9f9f9; border-radius: 8px; padding: 12px 14px; font-size: 12px; color: #555; font-family: monospace; max-height: 140px; overflow-y: auto; line-height: 1.7; }
+    .log .entry { }
+    .log .entry.ok { color: #16a34a; }
+    .log .entry.err { color: #dc2626; }
+    .log .entry.info { color: #2563eb; }
+    .updated { font-size: 11px; color: #bbb; text-align: right; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>GJ Style Migration</h1>
+    <p class="subtitle">Airtable → Supabase · Products + Images</p>
+
+    <div id="pill" class="status-pill waiting"><span class="dot"></span><span id="pill-text">Waiting for migration to start…</span></div>
+
+    <div class="stat-row">
+      <div class="stat"><div class="value blue" id="total">—</div><div class="label">Total</div></div>
+      <div class="stat"><div class="value green" id="done">0</div><div class="label">Migrated</div></div>
+      <div class="stat"><div class="value" id="images">0</div><div class="label">Images ✓</div></div>
+      <div class="stat"><div class="value red" id="errors">0</div><div class="label">Errors</div></div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-label"><span>Progress</span><span id="pct">0%</span></div>
+      <div class="bar-bg"><div class="bar-fill" id="bar" style="width:0%"></div></div>
+    </div>
+
+    <div class="log" id="log"><div class="entry info">Waiting for migration script to start...</div></div>
+    <div class="updated" id="updated"></div>
+  </div>
+
+  <script>
+    async function poll() {
+      try {
+        const r = await fetch('/migration-status.json?t=' + Date.now());
+        if (!r.ok) return;
+        const d = await r.json();
+
+        document.getElementById('total').textContent = d.total || '—';
+        document.getElementById('done').textContent = d.done || 0;
+        document.getElementById('images').textContent = d.images || 0;
+        document.getElementById('errors').textContent = d.errors || 0;
+
+        const pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
+        document.getElementById('pct').textContent = pct + '%';
+        const bar = document.getElementById('bar');
+        bar.style.width = pct + '%';
+
+        const pill = document.getElementById('pill');
+        const pillText = document.getElementById('pill-text');
+        if (d.status === 'done') {
+          pill.className = 'status-pill done';
+          pillText.textContent = '✅ Migration complete!';
+          bar.className = 'bar-fill done';
+          bar.style.width = '100%';
+        } else if (d.status === 'running') {
+          pill.className = 'status-pill running';
+          pillText.textContent = 'Migrating…';
+        }
+
+        const log = document.getElementById('log');
+        if (d.log && d.log.length) {
+          log.innerHTML = d.log.slice(-20).map(l =>
+            `<div class="entry ${l.type || ''}">${l.msg}</div>`
+          ).join('');
+          log.scrollTop = log.scrollHeight;
+        }
+
+        document.getElementById('updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+      } catch(e) {}
+    }
+
+    poll();
+    setInterval(poll, 2000);
+  </script>
+</body>
+</html>
