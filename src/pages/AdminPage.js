@@ -640,7 +640,6 @@ function ProductsTab() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [localProducts, setLocalProducts] = useState(null);
-  const [variantSearch, setVariantSearch] = useState('');
   const fileInputRef = useRef(null);
 
   const products = localProducts || source;
@@ -680,7 +679,6 @@ function ProductsTab() {
       _allSubcats: allSubcats,
     });
     setEditingIndex(index ?? filtered.findIndex((x) => x.id === p.id));
-    setVariantSearch('');
   }
 
   function goNext() {
@@ -961,51 +959,40 @@ function ProductsTab() {
                     </div>
                   ) : null;
                 })()}
-                {/* Link a variant — search by same category + subcategory */}
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={variantSearch}
-                    onChange={(e) => setVariantSearch(e.target.value)}
-                    placeholder="Search to link a variant…"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
-                  />
-                  {variantSearch.trim().length > 0 && (() => {
-                    const results = products.filter((p) =>
-                      p.id !== editing.id &&
-                      !p.deleted_at &&
-                      p.category === editing.category &&
-                      (p.sub_categories || []).some((s) => (editing.sub_categories || []).includes(s)) &&
-                      p.name.toLowerCase().includes(variantSearch.toLowerCase()) &&
-                      !p.parent_id
-                    ).slice(0, 8);
-                    return results.length > 0 ? (
-                      <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-48 overflow-y-auto">
-                        {results.map((p) => (
-                          <button key={p.id} type="button"
-                            onClick={async () => {
-                              await updateProduct(p.id, { parent_id: editing.id });
-                              setLocalProducts((prev) => (prev || source).map((x) => x.id === p.id ? { ...x, parent_id: editing.id } : x));
-                              setVariantSearch('');
-                            }}
-                            className="flex items-center gap-3 w-full px-3 py-2 text-sm text-left hover:bg-gray-50">
-                            <div className="h-8 w-8 rounded overflow-hidden bg-gray-100 flex-shrink-0">
-                              {p.image_url
-                                ? <img src={p.image_url} alt={p.name} className="h-full w-full object-contain" />
-                                : <div className="h-full flex items-center justify-center text-xs text-gray-300">?</div>}
-                            </div>
-                            <span className="font-medium text-gray-800">{p.name}</span>
-                            <span className="text-gray-400 text-xs ml-auto">{p.category}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-sm px-3 py-2 text-sm text-gray-400">
-                        No matching products in same category/subcategory
-                      </div>
-                    );
-                  })()}
-                </div>
+                {/* Link a variant — show all eligible products as image grid */}
+                {(() => {
+                  const eligible = products.filter((p) =>
+                    p.id !== editing.id &&
+                    !p.deleted_at &&
+                    !p.parent_id &&
+                    p.category === editing.category &&
+                    (p.sub_categories || []).some((s) => (editing.sub_categories || []).includes(s))
+                  );
+                  const linkedIds = new Set(products.filter((p) => p.parent_id === editing.id).map((p) => p.id));
+                  const available = eligible.filter((p) => !linkedIds.has(p.id));
+                  return available.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 max-h-64 overflow-y-auto">
+                      {available.map((p) => (
+                        <button key={p.id} type="button"
+                          onClick={async () => {
+                            await updateProduct(p.id, { parent_id: editing.id });
+                            setLocalProducts((prev) => (prev || source).map((x) => x.id === p.id ? { ...x, parent_id: editing.id } : x));
+                          }}
+                          title={p.name}
+                          className="relative group h-28 w-28 rounded-lg overflow-hidden border-2 border-dashed border-gray-200 bg-gray-50 hover:border-gray-900 transition-colors flex-shrink-0">
+                          {p.image_url
+                            ? <img src={p.image_url} alt={p.name} className="h-full w-full object-contain" />
+                            : <div className="h-full flex items-center justify-center text-xs text-gray-300">?</div>}
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-end justify-center pb-1">
+                            <span className="hidden group-hover:block text-white text-xs font-medium bg-black/60 px-1 rounded truncate max-w-full">{p.name}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">No other products in same category/subcategory to link</p>
+                  );
+                })()}
               </div>
             </div>
 
