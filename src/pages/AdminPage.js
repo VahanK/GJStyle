@@ -813,9 +813,9 @@ function ProductsTab() {
                   {p.parent_id && (() => {
                     const parent = products.find(x => x.id === p.parent_id);
                     return (
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-2">
                         {parent?.image_url && (
-                          <div className="h-8 w-8 rounded overflow-hidden bg-gray-100 flex-shrink-0">
+                          <div className="h-14 w-14 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
                             <img src={parent.image_url} alt={parent.name} className="h-full w-full object-contain" />
                           </div>
                         )}
@@ -825,9 +825,11 @@ function ProductsTab() {
                       </div>
                     );
                   })()}
-                  <button onClick={async () => {
-                    await updateProduct(p.id, { deleted_at: null, parent_id: null });
-                    setLocalProducts((prev) => (prev || source).map((x) => x.id === p.id ? { ...x, deleted_at: null, parent_id: null } : x));
+                  <button onClick={() => {
+                    if (window.confirm(`Restore "${p.name}"? This will remove it from its parent and show it in the catalog again.`)) {
+                      updateProduct(p.id, { deleted_at: null, parent_id: null });
+                      setLocalProducts((prev) => (prev || source).map((x) => x.id === p.id ? { ...x, deleted_at: null, parent_id: null } : x));
+                    }
                   }} className="w-full rounded-lg border border-green-300 py-1.5 text-xs text-green-700 hover:bg-green-50">
                     ↩ Restore
                   </button>
