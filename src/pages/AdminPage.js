@@ -810,11 +810,21 @@ function ProductsTab() {
               )}
               {(p.deleted_at || p.parent_id) ? (
                 <>
-                  {p.parent_id && (
-                    <p className="text-xs text-blue-400 italic mb-1">
-                      Variant of: {products.find(x => x.id === p.parent_id)?.name || `#${p.parent_id}`}
-                    </p>
-                  )}
+                  {p.parent_id && (() => {
+                    const parent = products.find(x => x.id === p.parent_id);
+                    return (
+                      <div className="flex items-center gap-2 mb-1">
+                        {parent?.image_url && (
+                          <div className="h-8 w-8 rounded overflow-hidden bg-gray-100 flex-shrink-0">
+                            <img src={parent.image_url} alt={parent.name} className="h-full w-full object-contain" />
+                          </div>
+                        )}
+                        <p className="text-xs text-blue-400 italic truncate">
+                          Variant of: {parent?.name || `#${p.parent_id}`}
+                        </p>
+                      </div>
+                    );
+                  })()}
                   <button onClick={async () => {
                     await updateProduct(p.id, { deleted_at: null, parent_id: null });
                     setLocalProducts((prev) => (prev || source).map((x) => x.id === p.id ? { ...x, deleted_at: null, parent_id: null } : x));
