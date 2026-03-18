@@ -714,7 +714,7 @@ function ProductsTab() {
         const updatedFiltered = (localProducts || source).map((p) => p.id === editing.id ? { ...p, ...editing } : p).filter((p) => {
           const matchCat = catFilter === 'All' || p.category === catFilter;
           const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
-          const matchMissing = !missingOnly || !p.price || !(p.plating?.length) || !(p.stones?.length);
+          const matchMissing = !missingOnly || !p.price || !(p.plating?.length) || (needsStones(p) && !(p.stones?.length));
           return matchCat && matchSearch && matchMissing;
         });
         const nextP = updatedFiltered[editingIndex + 1] || updatedFiltered[editingIndex];
