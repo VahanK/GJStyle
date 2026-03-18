@@ -700,7 +700,7 @@ function ProductsTab() {
     try {
       await updateProduct(editing.id, {
         name: editing.name,
-        price: editing.price || null,
+        price: editing.price ? Math.round(Number(editing.price)) : null,
         plating: editing.plating,
         stones: editing.stones,
         sub_categories: editing.sub_categories,
@@ -793,7 +793,7 @@ function ProductsTab() {
               <p className="text-sm font-semibold text-gray-800 truncate mb-1">{p.name}</p>
               <p className="text-xs text-gray-400 mb-1">{p.category}</p>
               <p className="text-sm font-bold text-gray-900 mb-1">
-                {p.price ? `$${Number(p.price).toFixed(2)}` : <span className="text-xs text-amber-500 font-normal italic">No price</span>}
+                {p.price ? `$${Math.round(Number(p.price))}` : <span className="text-xs text-amber-500 font-normal italic">No price</span>}
               </p>
               {missingStones && (
                 <p className="text-xs text-amber-500 italic mb-1">No stone colors</p>
@@ -861,9 +861,9 @@ function ProductsTab() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Price (USD)</label>
-                  <input type="number" step="0.01" value={editing.price || ''}
-                    onChange={(e) => setEditing((ed) => ({ ...ed, price: e.target.value }))}
-                    placeholder="0.00"
+                  <input type="text" inputMode="numeric" value={editing.price || ''}
+                    onChange={(e) => { if (/^\d*$/.test(e.target.value)) setEditing((ed) => ({ ...ed, price: e.target.value })); }}
+                    placeholder="0"
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none" />
                 </div>
               </div>
@@ -1016,7 +1016,7 @@ function AddProductModal({ onClose, onCreated, allProducts, platingSuggestions, 
       const rows = await createProduct({
         name: form.name.trim(),
         category: form.category,
-        price: form.price ? Number(form.price) : null,
+        price: form.price ? Math.round(Number(form.price)) : null,
         plating: form.plating,
         stones: form.stones,
         sub_categories: form.sub_categories,
@@ -1071,8 +1071,9 @@ function AddProductModal({ onClose, onCreated, allProducts, platingSuggestions, 
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Price (USD)</label>
-            <input type="number" step="0.01" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-              placeholder="0.00"
+            <input type="text" inputMode="numeric" value={form.price}
+              onChange={(e) => { if (/^\d*$/.test(e.target.value)) setForm((f) => ({ ...f, price: e.target.value })); }}
+              placeholder="0"
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none" />
           </div>
 
