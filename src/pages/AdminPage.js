@@ -1105,7 +1105,7 @@ function AddProductModal({ onClose, onCreated, allProducts, platingSuggestions, 
         </div>
         <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
           <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-100">Cancel</button>
-          <button onClick={handleCreate} disabled={saving || !!nameError}
+          <button onClick={handleCreate} disabled={saving}
             className="rounded-lg bg-gray-900 px-5 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50">
             {saving ? 'Creating…' : 'Create Product'}
           </button>
