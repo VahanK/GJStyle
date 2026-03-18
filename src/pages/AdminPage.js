@@ -654,9 +654,9 @@ function ProductsTab() {
   }
 
   // In normal view: hide deleted and hide variants (parent_id set)
-  // showDeleted: show only deleted products
+  // showDeleted: show deleted products AND variants (parent_id set)
   const filtered = products.filter((p) => {
-    if (showDeleted) return !!p.deleted_at;
+    if (showDeleted) return !!p.deleted_at || !!p.parent_id;
     if (p.deleted_at) return false;
     if (p.parent_id) return false; // variants hidden from main list
     const matchCat = catFilter === 'All' || p.category === catFilter;
@@ -808,13 +808,21 @@ function ProductsTab() {
               {missingStones && (
                 <p className="text-xs text-amber-500 italic mb-1">No stone colors</p>
               )}
-              {p.deleted_at ? (
-                <button onClick={async () => {
-                  await updateProduct(p.id, { deleted_at: null });
-                  setLocalProducts((prev) => (prev || source).map((x) => x.id === p.id ? { ...x, deleted_at: null } : x));
-                }} className="w-full rounded-lg border border-green-300 py-1.5 text-xs text-green-700 hover:bg-green-50">
-                  ↩ Restore
-                </button>
+              {(p.deleted_at || p.parent_id) ? (
+                <>
+                  {p.parent_id && (
+                    <p className="text-xs text-blue-400 italic mb-1">
+                      Variant of: {products.find(x => x.id === p.parent_id)?.name || `#${p.parent_id}`}
+                    </p>
+                  )}
+                  <button onClick={async () => {
+                    await updateProduct(p.id, { deleted_at: null, parent_id: null });
+                    setLocalProducts((prev) => (prev || source).map((x) => x.id === p.id ? { ...x, deleted_at: null, parent_id: null } : x));
+                  }} className="w-full rounded-lg border border-green-300 py-1.5 text-xs text-green-700 hover:bg-green-50">
+                    ↩ Restore
+                  </button>
+                </>
+
               ) : (
                 <div className="flex gap-2">
                   <button onClick={() => openEdit(p, index)}
