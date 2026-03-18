@@ -934,7 +934,7 @@ function ProductsTab() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Variant Images</label>
                 {/* Current variants linked to this product */}
                 {(() => {
-                  const linkedVariants = products.filter((p) => p.parent_id === editing.id && !p.deleted_at);
+                  const linkedVariants = products.filter((p) => p.parent_id === editing.id);
                   return linkedVariants.length > 0 ? (
                     <div className="flex flex-wrap gap-2 mb-3">
                       {linkedVariants.map((v) => (
@@ -948,8 +948,8 @@ function ProductsTab() {
                           <button
                             type="button"
                             onClick={async () => {
-                              await updateProduct(v.id, { parent_id: null });
-                              setLocalProducts((prev) => (prev || source).map((x) => x.id === v.id ? { ...x, parent_id: null } : x));
+                              await updateProduct(v.id, { parent_id: null, deleted_at: null });
+                              setLocalProducts((prev) => (prev || source).map((x) => x.id === v.id ? { ...x, parent_id: null, deleted_at: null } : x));
                             }}
                             className="absolute -top-1 -right-1 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white text-xs leading-none">
                             ×
@@ -963,7 +963,6 @@ function ProductsTab() {
                 {(() => {
                   const eligible = products.filter((p) =>
                     p.id !== editing.id &&
-                    !p.deleted_at &&
                     !p.parent_id &&
                     p.category === editing.category &&
                     (p.sub_categories || []).some((s) => (editing.sub_categories || []).includes(s))
@@ -975,8 +974,9 @@ function ProductsTab() {
                       {available.map((p) => (
                         <button key={p.id} type="button"
                           onClick={async () => {
-                            await updateProduct(p.id, { parent_id: editing.id });
-                            setLocalProducts((prev) => (prev || source).map((x) => x.id === p.id ? { ...x, parent_id: editing.id } : x));
+                            const now = new Date().toISOString();
+                            await updateProduct(p.id, { parent_id: editing.id, deleted_at: now });
+                            setLocalProducts((prev) => (prev || source).map((x) => x.id === p.id ? { ...x, parent_id: editing.id, deleted_at: now } : x));
                           }}
                           title={p.name}
                           className="relative group h-28 w-28 rounded-lg overflow-hidden border-2 border-dashed border-gray-200 bg-gray-50 hover:border-gray-900 transition-colors flex-shrink-0">

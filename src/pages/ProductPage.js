@@ -34,7 +34,7 @@ export default function ProductPage() {
 
   // Variant images: other products linked to this one (parent_id = product.id)
   const variantImages = product
-    ? (allProducts || products).filter((p) => p.parent_id === product.id && !p.deleted_at && p.image_url)
+    ? (allProducts || products).filter((p) => p.parent_id === product.id && p.image_url)
     : [];
 
   // Multiple variants — each row = one plating+stone+qty combo
