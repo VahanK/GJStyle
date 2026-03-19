@@ -633,7 +633,7 @@ function ProductsTab() {
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('All');
   const [missingOnly, setMissingOnly] = useState(false);
-  const [showDeleted, setShowDeleted] = useState(false);
+  const [productTab, setProductTab] = useState('all'); // 'all' | 'deleted' | 'variants'
   const [editing, setEditing] = useState(null);
   const [editingIndex, setEditingIndex] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -641,6 +641,7 @@ function ProductsTab() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [localProducts, setLocalProducts] = useState(null);
   const fileInputRef = useRef(null);
+  const extraImageInputRef = useRef(null);
 
   const products = localProducts || source;
 
@@ -653,20 +654,32 @@ function ProductsTab() {
     return (p.sub_categories || []).some((s) => /stone/i.test(s));
   }
 
-  // In normal view: hide deleted and hide variants (parent_id set)
-  // showDeleted: show deleted products AND variants (parent_id set)
-  const filtered = products.filter((p) => {
-    if (showDeleted) return !!p.deleted_at || !!p.parent_id;
-    if (p.deleted_at) return false;
-    if (p.parent_id) return false; // variants hidden from main list
-    const matchCat = catFilter === 'All' || p.category === catFilter;
-    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
-    const missingStonesFlag = needsStones(p) && !(p.stones?.length);
-    const matchMissing = !missingOnly || !p.price || !(p.plating?.length) || missingStonesFlag;
-    return matchCat && matchSearch && matchMissing;
-  });
+  function isMissing(p) {
+    return !p.price || !(p.plating?.length) || (needsStones(p) && !(p.stones?.length));
+  }
 
-  const missingCount = products.filter((p) => !p.deleted_at && !p.parent_id && (!p.price || !(p.plating?.length) || (needsStones(p) && !(p.stones?.length)))).length;
+  const filtered = (() => {
+    if (productTab === 'deleted') return products.filter((p) => !!p.deleted_at && !p.parent_id);
+    if (productTab === 'variants') return products.filter((p) => !!p.parent_id);
+    // 'all' tab
+    return products.filter((p) => {
+      if (p.deleted_at) return false;
+      if (p.parent_id) return false;
+      const matchCat = catFilter === 'All' || p.category === catFilter;
+      const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
+      const matchMissing = !missingOnly || isMissing(p);
+      return matchCat && matchSearch && matchMissing;
+    }).sort((a, b) => {
+      // Missing info first
+      const aMissing = isMissing(a) ? 0 : 1;
+      const bMissing = isMissing(b) ? 0 : 1;
+      return aMissing - bMissing;
+    });
+  })();
+
+  const missingCount = products.filter((p) => !p.deleted_at && !p.parent_id && isMissing(p)).length;
+  const deletedCount = products.filter((p) => !!p.deleted_at && !p.parent_id).length;
+  const variantsCount = products.filter((p) => !!p.parent_id).length;
   const categories = ['All', ...Array.from(new Set(products.filter(p => !p.deleted_at).map((p) => p.category))).sort()];
 
   function openEdit(p, index) {
@@ -713,6 +726,7 @@ function ProductsTab() {
         category: editing.category,
         notes: editing.notes,
         image_url: editing.image_url,
+        extra_images: editing.extra_images || [],
       });
       setLocalProducts((prev) => (prev || source).map((p) => p.id === editing.id ? { ...p, ...editing } : p));
       if (andNext && editingIndex + 1 < filtered.length) {
@@ -744,6 +758,18 @@ function ProductsTab() {
     finally { setSaving(false); }
   }
 
+  async function handleExtraImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file || !editing) return;
+    setSaving(true);
+    try {
+      const url = await uploadProductImage(file, `${editing.id}-extra-${Date.now()}`);
+      const newExtras = [...(editing.extra_images || []), url];
+      setEditing((ed) => ({ ...ed, extra_images: newExtras }));
+    } catch (err) { alert('Image upload failed: ' + err.message); }
+    finally { setSaving(false); e.target.value = ''; }
+  }
+
   async function handleDelete(p) {
     setSaving(true);
     try {
@@ -757,28 +783,42 @@ function ProductsTab() {
   return (
     <>
       {/* Toolbar */}
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 border-b border-gray-200">
+        {[
+          { key: 'all', label: 'All Products', count: products.filter(p => !p.deleted_at && !p.parent_id).length },
+          { key: 'deleted', label: '🗑 Deleted', count: deletedCount },
+          { key: 'variants', label: '🔗 Variants', count: variantsCount },
+        ].map((t) => (
+          <button key={t.key} onClick={() => { setProductTab(t.key); setMissingOnly(false); }}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${productTab === t.key ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+            {t.label} <span className="ml-1 text-xs text-gray-400">({t.count})</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Toolbar — only show for 'all' tab */}
       <div className="flex flex-wrap gap-3 mb-4 items-center justify-between">
-        <div className="flex gap-2 flex-wrap items-center">
-          <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            <input type="text" placeholder="Search products..." value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:border-gray-400 focus:outline-none w-56" />
+        {productTab === 'all' && (
+          <div className="flex gap-2 flex-wrap items-center">
+            <div className="relative">
+              <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <input type="text" placeholder="Search products..." value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:border-gray-400 focus:outline-none w-56" />
+            </div>
+            <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none">
+              {categories.map((c) => <option key={c}>{c}</option>)}
+            </select>
+            <button onClick={() => setMissingOnly((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${missingOnly ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-600 border-amber-300 hover:bg-amber-50'}`}>
+              ⚠ Missing data ({missingCount})
+            </button>
+            <span className="text-sm text-gray-400">{filtered.length} products</span>
           </div>
-          <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none">
-            {categories.map((c) => <option key={c}>{c}</option>)}
-          </select>
-          <button onClick={() => { setMissingOnly((v) => !v); setShowDeleted(false); }}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${missingOnly ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-600 border-amber-300 hover:bg-amber-50'}`}>
-            ⚠ Missing data {missingOnly ? `(${filtered.length})` : `(${missingCount})`}
-          </button>
-          <button onClick={() => { setShowDeleted((v) => !v); setMissingOnly(false); }}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${showDeleted ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'}`}>
-            🗑 Deleted {showDeleted ? `(${filtered.length})` : ''}
-          </button>
-          <span className="text-sm text-gray-400">{filtered.length} products</span>
-        </div>
+        )}
+        {productTab !== 'all' && <span className="text-sm text-gray-400">{filtered.length} products</span>}
         <button onClick={() => setShowAddForm(true)}
           className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700">
           <PlusIcon className="h-4 w-4" /> Add Product
@@ -887,6 +927,29 @@ function ProductsTab() {
                     {saving ? 'Uploading…' : 'Change Image'}
                   </button>
                   <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                </div>
+              </div>
+
+              {/* Extra Images */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Extra Images <span className="text-xs text-gray-400 font-normal">(stone chart, detail shots, etc.)</span></label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(editing.extra_images || []).map((url, i) => (
+                    <div key={i} className="relative group">
+                      <div className="h-20 w-20 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                        <img src={url} alt={`extra-${i}`} className="h-full w-full object-contain" />
+                      </div>
+                      <button type="button"
+                        onClick={() => setEditing((ed) => ({ ...ed, extra_images: (ed.extra_images || []).filter((_, idx) => idx !== i) }))}
+                        className="absolute -top-1 -right-1 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white text-xs leading-none shadow">×</button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => extraImageInputRef.current?.click()}
+                    className="h-20 w-20 rounded-lg border-2 border-dashed border-gray-200 hover:border-gray-400 flex flex-col items-center justify-center text-gray-400 hover:text-gray-600 transition-colors text-xs gap-1">
+                    <PhotoIcon className="h-5 w-5" />
+                    {saving ? '…' : 'Add'}
+                  </button>
+                  <input ref={extraImageInputRef} type="file" accept="image/*" className="hidden" onChange={handleExtraImageUpload} />
                 </div>
               </div>
 
