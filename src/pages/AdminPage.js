@@ -14,7 +14,7 @@ import {
   ShoppingBagIcon, UsersIcon, ChevronDownIcon, ChevronRightIcon,
   CubeIcon, MagnifyingGlassIcon, PhotoIcon, BellIcon,
   CalendarIcon, HomeIcon, ExclamationTriangleIcon, BanknotesIcon,
-  ClipboardDocumentListIcon,
+  ClipboardDocumentListIcon, ChartBarIcon,
 } from '@heroicons/react/24/outline';
 
 const ALL_CATEGORIES = ['Earrings','Rings','Bracelets','Necklaces','Sets','Pendants','Armlets','Shambala'];
@@ -137,6 +137,273 @@ function TagEditor({ label, values, onChange, suggestions }) {
           className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-gray-400 focus:outline-none" />
         <button type="button" onClick={addCustom}
           className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Add</button>
+      </div>
+    </div>
+  );
+}
+
+// ── ANALYTICS TAB ────────────────────────────────────────────────────────────
+function AnalyticsTab() {
+  const { products } = useProducts();
+  const [orders, setOrders] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState('30'); // days
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [ordersData, clientsData] = await Promise.all([
+        fetchOrdersWithItemsFull(),
+        fetchClients(),
+      ]);
+      setOrders(ordersData);
+      setClients(clientsData);
+    } catch (e) {
+      console.error('Analytics load error:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) {
+    return <div className="text-center py-12 text-gray-400">Loading analytics...</div>;
+  }
+
+  // Filter orders by time range
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - parseInt(timeRange));
+  const filteredOrders = orders.filter((o) => new Date(o.created_at) >= cutoffDate);
+
+  // CLIENT ANALYTICS
+  const clientOrders = {};
+  filteredOrders.forEach((o) => {
+    const cid = o.clients?.id;
+    if (!cid) return;
+    if (!clientOrders[cid]) {
+      clientOrders[cid] = { name: o.clients.name, orders: [], totalRevenue: 0, totalItems: 0 };
+    }
+    clientOrders[cid].orders.push(o);
+    clientOrders[cid].totalRevenue += o.total_amount || 0;
+    clientOrders[cid].totalItems += (o.order_items || []).reduce((sum, i) => sum + (i.quantity || 0), 0);
+  });
+
+  const topClients = Object.values(clientOrders)
+    .sort((a, b) => b.totalRevenue - a.totalRevenue)
+    .slice(0, 10);
+
+  const inactiveClients = clients.filter((c) => {
+    const lastOrder = orders
+      .filter((o) => o.clients?.id === c.id)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+    if (!lastOrder) return true;
+    const daysSince = (new Date() - new Date(lastOrder.created_at)) / (1000 * 60 * 60 * 24);
+    return daysSince > parseInt(timeRange);
+  });
+
+  // PRODUCT ANALYTICS
+  const productSales = {};
+  filteredOrders.forEach((o) => {
+    (o.order_items || []).forEach((item) => {
+      const pid = item.products?.id;
+      if (!pid) return;
+      if (!productSales[pid]) {
+        productSales[pid] = {
+          name: item.products.name,
+          category: item.products.category,
+          quantity: 0,
+          revenue: 0,
+          orders: 0,
+        };
+      }
+      productSales[pid].quantity += item.quantity || 0;
+      productSales[pid].revenue += (item.products.price || 0) * (item.quantity || 0);
+      productSales[pid].orders += 1;
+    });
+  });
+
+  const bestsellers = Object.values(productSales)
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 10);
+
+  const slowMovers = Object.values(productSales)
+    .sort((a, b) => a.quantity - b.quantity)
+    .slice(0, 10);
+
+  // PLATING/STONE TRENDS
+  const platingCount = {};
+  const stoneCount = {};
+  filteredOrders.forEach((o) => {
+    (o.order_items || []).forEach((item) => {
+      if (item.plating) {
+        platingCount[item.plating] = (platingCount[item.plating] || 0) + (item.quantity || 0);
+      }
+      if (item.stone_color) {
+        stoneCount[item.stone_color] = (stoneCount[item.stone_color] || 0) + (item.quantity || 0);
+      }
+    });
+  });
+
+  const topPlatings = Object.entries(platingCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  const topStones = Object.entries(stoneCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  // REVENUE ANALYTICS
+  const totalRevenue = filteredOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+  const totalPaid = filteredOrders.reduce((sum, o) => sum + (o.amount_paid || 0), 0);
+  const totalOutstanding = totalRevenue - totalPaid;
+  const paymentCollectionRate = totalRevenue > 0 ? (totalPaid / totalRevenue) * 100 : 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Time range selector */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900">Analytics</h2>
+        <select value={timeRange} onChange={(e) => setTimeRange(e.target.value)}
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none">
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="180">Last 6 months</option>
+          <option value="365">Last year</option>
+        </select>
+      </div>
+
+      {/* Revenue stats */}
+      <div className="grid gap-4 sm:grid-cols-4">
+        <div className="rounded-xl bg-white border border-gray-100 p-5">
+          <p className="text-sm font-medium text-gray-500">Total Revenue</p>
+          <p className="mt-2 text-2xl font-bold text-gray-900">${totalRevenue.toFixed(2)}</p>
+        </div>
+        <div className="rounded-xl bg-white border border-gray-100 p-5">
+          <p className="text-sm font-medium text-gray-500">Collected</p>
+          <p className="mt-2 text-2xl font-bold text-green-600">${totalPaid.toFixed(2)}</p>
+        </div>
+        <div className="rounded-xl bg-white border border-gray-100 p-5">
+          <p className="text-sm font-medium text-gray-500">Outstanding</p>
+          <p className="mt-2 text-2xl font-bold text-amber-600">${totalOutstanding.toFixed(2)}</p>
+        </div>
+        <div className="rounded-xl bg-white border border-gray-100 p-5">
+          <p className="text-sm font-medium text-gray-500">Collection Rate</p>
+          <p className="mt-2 text-2xl font-bold text-gray-900">{paymentCollectionRate.toFixed(1)}%</p>
+        </div>
+      </div>
+
+      {/* Client & Product Analytics */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Top clients */}
+        <div className="rounded-xl bg-white border border-gray-100 overflow-hidden">
+          <div className="border-b border-gray-100 px-5 py-3">
+            <h3 className="font-semibold text-gray-900">Top Clients by Revenue</h3>
+          </div>
+          <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+            {topClients.map((c, i) => (
+              <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                  <p className="text-xs text-gray-500">{c.orders.length} orders · {c.totalItems} items</p>
+                </div>
+                <p className="text-sm font-bold text-gray-900">${c.totalRevenue.toFixed(2)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bestsellers */}
+        <div className="rounded-xl bg-white border border-gray-100 overflow-hidden">
+          <div className="border-b border-gray-100 px-5 py-3">
+            <h3 className="font-semibold text-gray-900">Bestsellers</h3>
+          </div>
+          <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+            {bestsellers.map((p, i) => (
+              <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
+                  <p className="text-xs text-gray-500">{p.category} · {p.orders} orders</p>
+                </div>
+                <div className="text-right ml-4">
+                  <p className="text-sm font-bold text-gray-900">{p.quantity} sold</p>
+                  <p className="text-xs text-gray-500">${p.revenue.toFixed(2)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Inactive clients */}
+        {inactiveClients.length > 0 && (
+          <div className="rounded-xl bg-white border border-amber-200 overflow-hidden">
+            <div className="bg-amber-50 border-b border-amber-200 px-5 py-3">
+              <h3 className="font-semibold text-amber-900">Inactive Clients ({inactiveClients.length})</h3>
+              <p className="text-xs text-amber-700">No orders in {timeRange} days</p>
+            </div>
+            <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+              {inactiveClients.slice(0, 10).map((c) => (
+                <div key={c.id} className="px-5 py-2 hover:bg-gray-50">
+                  <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Slow movers */}
+        {slowMovers.length > 0 && (
+          <div className="rounded-xl bg-white border border-gray-100 overflow-hidden">
+            <div className="border-b border-gray-100 px-5 py-3">
+              <h3 className="font-semibold text-gray-900">Slow Movers</h3>
+            </div>
+            <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+              {slowMovers.map((p, i) => (
+                <div key={i} className="px-5 py-2 hover:bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
+                    <p className="text-sm text-gray-500 ml-2">{p.quantity} sold</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Trends */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Top platings */}
+        {topPlatings.length > 0 && (
+          <div className="rounded-xl bg-white border border-gray-100 p-5">
+            <h3 className="font-semibold text-gray-900 mb-3">Popular Platings</h3>
+            <div className="space-y-2">
+              {topPlatings.map(([plating, count]) => (
+                <div key={plating} className="flex items-center justify-between">
+                  <span className="text-sm text-gray-700 capitalize">{plating}</span>
+                  <span className="text-sm font-semibold text-gray-900">{count} items</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Top stones */}
+        {topStones.length > 0 && (
+          <div className="rounded-xl bg-white border border-gray-100 p-5">
+            <h3 className="font-semibold text-gray-900 mb-3">Popular Stone Colors</h3>
+            <div className="space-y-2">
+              {topStones.map(([stone, count]) => (
+                <div key={stone} className="flex items-center justify-between">
+                  <span className="text-sm text-gray-700 capitalize">{stone}</span>
+                  <span className="text-sm font-semibold text-gray-900">{count} items</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -331,9 +598,10 @@ export default function AdminPage() {
           <h1 className="text-2xl font-bold text-gray-900">Admin</h1>
           <p className="mt-1 text-sm text-gray-500">Manage products, clients, and orders.</p>
         </div>
-        <div className="flex gap-1 mb-8 border-b border-gray-200">
+        <div className="flex gap-1 mb-8 border-b border-gray-200 overflow-x-auto">
           {[
             ['dashboard', <HomeIcon className="h-4 w-4" key="d" />, 'Dashboard'],
+            ['analytics', <ChartBarIcon className="h-4 w-4" key="a" />, 'Analytics'],
             ['clients', <UsersIcon className="h-4 w-4" key="u" />, 'Clients'],
             ['products', <CubeIcon className="h-4 w-4" key="p" />, 'Products'],
             ['orders', <ShoppingBagIcon className="h-4 w-4" key="s" />, 'Orders'],
@@ -347,6 +615,7 @@ export default function AdminPage() {
           ))}
         </div>
         {tab === 'dashboard' && <DashboardTab onNavigate={setTab} />}
+        {tab === 'analytics' && <AnalyticsTab />}
         {tab === 'clients' && <ClientsTab />}
         {tab === 'products' && <ProductsTab />}
         {tab === 'orders' && <OrdersTab />}

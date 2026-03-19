@@ -258,3 +258,61 @@ export async function fetchClientOrdersFull(clientId) {
     `/orders?client_id=eq.${clientId}&select=id,status,notes,due_date,created_at,order_items(id,quantity,plating,stone_color,notes,products(id,name,category,image_url,price))&order=created_at.desc`
   );
 }
+
+// ── Custom Pricing ────────────────────────────────────────────────────────────
+export async function fetchClientPricing(clientId) {
+  return sbFetch(`/client_pricing?client_id=eq.${clientId}&select=*`);
+}
+
+export async function setClientPrice(clientId, productId, customPrice) {
+  return sbFetch('/client_pricing', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+    body: JSON.stringify({ client_id: clientId, product_id: productId, custom_price: customPrice }),
+  });
+}
+
+export async function deleteClientPrice(clientId, productId) {
+  return sbFetch(`/client_pricing?client_id=eq.${clientId}&product_id=eq.${productId}`, {
+    method: 'DELETE',
+  });
+}
+
+// ── Favorites/Wishlist ────────────────────────────────────────────────────────
+export async function fetchClientFavorites(clientId) {
+  return sbFetch(`/client_favorites?client_id=eq.${clientId}&select=*,products(*)`);
+}
+
+export async function addFavorite(clientId, productId) {
+  return sbFetch('/client_favorites', {
+    method: 'POST',
+    headers: { Prefer: 'return=minimal,resolution=merge-duplicates' },
+    body: JSON.stringify({ client_id: clientId, product_id: productId }),
+  });
+}
+
+export async function removeFavorite(clientId, productId) {
+  return sbFetch(`/client_favorites?client_id=eq.${clientId}&product_id=eq.${productId}`, {
+    method: 'DELETE',
+  });
+}
+
+// ── Message Log ───────────────────────────────────────────────────────────────
+export async function logMessage(clientId, orderId, messageType, subject, body, sentBy) {
+  return sbFetch('/message_log', {
+    method: 'POST',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      client_id: clientId,
+      order_id: orderId,
+      message_type: messageType,
+      subject: subject,
+      body: body,
+      sent_by: sentBy,
+    }),
+  });
+}
+
+export async function fetchClientMessages(clientId) {
+  return sbFetch(`/message_log?client_id=eq.${clientId}&select=*&order=sent_at.desc`);
+}
