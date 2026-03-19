@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProducts } from '../App';
 import {
-  fetchClients, createClient, updateClient, deleteClient, markClientContacted,
+  fetchClients, createClient, updateClient, deleteClient,
   fetchOrdersWithItemsFull, updateOrderAdmin,
   updateOrderItem, deleteOrderItem, addOrderItem,
   fetchAllPendingChangeRequests, fetchChangeRequests, updateChangeRequest,
@@ -1542,6 +1542,12 @@ function OrdersTab() {
       payment_status: order.payment_status || 'unpaid',
       amount_paid: order.amount_paid || 0,
       total_amount: order.total_amount || 0,
+      tracking_number: order.tracking_number || '',
+      carrier: order.carrier || '',
+      shipped_date: order.shipped_date || '',
+      has_issues: order.has_issues || false,
+      issue_description: order.issue_description || '',
+      resolution_status: order.resolution_status || 'pending',
       items: (order.order_items || []).map((i) => ({ ...i, _editing: false })),
     });
     const [hist, reqs] = await Promise.all([
@@ -1842,11 +1848,6 @@ function OrdersTab() {
               </div>
               {saveIndicator === 'saving' && <span className="text-xs text-gray-400 flex-shrink-0">Saving…</span>}
               {saveIndicator === 'saved' && <span className="text-xs text-green-500 flex-shrink-0">✓ Saved</span>}
-              <a href={`/factory-print/${selectedOrder.id}`} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">
-                <ClipboardDocumentListIcon className="h-4 w-4" />
-                Print
-              </a>
               <button onClick={closeDetail} className="text-gray-400 hover:text-gray-700 text-2xl leading-none flex-shrink-0">×</button>
             </div>
 
@@ -1935,6 +1936,81 @@ function OrdersTab() {
                     saveFieldDebounced('amount_paid', v);
                   }}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
+              </div>
+
+              {/* Shipping Info */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Tracking Number</label>
+                <input type="text" value={orderDetail.tracking_number}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setOrderDetail((d) => d ? { ...d, tracking_number: v } : d);
+                    saveFieldDebounced('tracking_number', v);
+                  }}
+                  placeholder="e.g., 1Z999AA10123456784"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Carrier</label>
+                <input type="text" value={orderDetail.carrier}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setOrderDetail((d) => d ? { ...d, carrier: v } : d);
+                    saveFieldDebounced('carrier', v);
+                  }}
+                  placeholder="e.g., DHL, FedEx, UPS"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Shipped Date</label>
+                <input type="date" value={orderDetail.shipped_date ? orderDetail.shipped_date.split('T')[0] : ''}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setOrderDetail((d) => d ? { ...d, shipped_date: v } : d);
+                    saveFieldDebounced('shipped_date', v ? new Date(v).toISOString() : null);
+                  }}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
+              </div>
+
+              {/* Issue Tracking */}
+              <div className="col-span-2">
+                <div className="flex items-center gap-3 mb-2">
+                  <label className="block text-xs font-medium text-gray-500">Issues / Returns</label>
+                  <button onClick={() => {
+                    const newVal = !orderDetail.has_issues;
+                    setOrderDetail((d) => d ? { ...d, has_issues: newVal, issue_description: newVal ? d.issue_description : '' } : d);
+                    saveField('has_issues', newVal);
+                    if (!newVal) saveField('issue_description', '');
+                  }}
+                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${orderDetail.has_issues ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                    {orderDetail.has_issues ? '⚠ Has Issues' : 'No Issues'}
+                  </button>
+                  {orderDetail.has_issues && (
+                    <select value={orderDetail.resolution_status}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setOrderDetail((d) => d ? { ...d, resolution_status: v } : d);
+                        saveField('resolution_status', v);
+                      }}
+                      className="rounded-lg border border-gray-200 px-2 py-1 text-xs focus:outline-none">
+                      <option value="pending">Pending</option>
+                      <option value="resolved">Resolved</option>
+                    </select>
+                  )}
+                </div>
+                {orderDetail.has_issues && (
+                  <textarea value={orderDetail.issue_description}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setOrderDetail((d) => d ? { ...d, issue_description: v } : d);
+                      saveFieldDebounced('issue_description', v, 1000);
+                    }}
+                    rows={2}
+                    placeholder="Describe the issue (e.g., wrong size, damaged items, missing pieces)..."
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none resize-none" />
+                )}
               </div>
 
               {/* Toggles — instant save */}

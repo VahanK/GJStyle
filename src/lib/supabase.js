@@ -248,7 +248,7 @@ export async function addOrderHistory(orderId, changedBy, description) {
 // Full orders for admin with new columns
 export async function fetchOrdersWithItemsFull() {
   return sbFetch(
-    '/orders?select=id,status,notes,admin_notes,due_date,contacted,payment_received,production_status,payment_status,amount_paid,total_amount,created_at,clients(id,name,whatsapp,instagram),order_items(id,quantity,plating,stone_color,notes,products(id,name,category,image_url,price))&order=created_at.desc'
+    '/orders?select=id,status,notes,admin_notes,due_date,contacted,payment_received,production_status,payment_status,amount_paid,total_amount,tracking_number,carrier,shipped_date,has_issues,issue_description,resolution_status,created_at,clients(id,name,whatsapp,instagram),order_items(id,quantity,plating,stone_color,notes,products(id,name,category,image_url,price))&order=created_at.desc'
   );
 }
 
