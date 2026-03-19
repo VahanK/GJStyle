@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProducts } from '../App';
 import {
-  fetchClients, createClient, updateClient, deleteClient,
+  fetchClients, createClient, updateClient, deleteClient, markClientContacted,
   fetchOrdersWithItemsFull, updateOrderAdmin,
   updateOrderItem, deleteOrderItem, addOrderItem,
   fetchAllPendingChangeRequests, fetchChangeRequests, updateChangeRequest,
@@ -13,7 +13,8 @@ import {
   CheckCircleIcon, XCircleIcon,
   ShoppingBagIcon, UsersIcon, ChevronDownIcon, ChevronRightIcon,
   CubeIcon, MagnifyingGlassIcon, PhotoIcon, BellIcon,
-  CalendarIcon,
+  CalendarIcon, HomeIcon, ExclamationTriangleIcon, BanknotesIcon,
+  ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline';
 
 const ALL_CATEGORIES = ['Earrings','Rings','Bracelets','Necklaces','Sets','Pendants','Armlets','Shambala'];
@@ -141,8 +142,188 @@ function TagEditor({ label, values, onChange, suggestions }) {
   );
 }
 
+// ── DASHBOARD TAB ────────────────────────────────────────────────────────────
+function DashboardTab({ onNavigate }) {
+  const { products } = useProducts();
+  const [orders, setOrders] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [ordersData, clientsData] = await Promise.all([
+        fetchOrdersWithItemsFull(),
+        fetchClients(),
+      ]);
+      setOrders(ordersData);
+      setClients(clientsData);
+    } catch (e) {
+      console.error('Dashboard load error:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) {
+    return <div className="text-center py-12 text-gray-400">Loading dashboard...</div>;
+  }
+
+  // Calculate action items
+  const today = new Date();
+  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const pendingOrders = orders.filter((o) => o.production_status === 'pending');
+  const unpaidOrders = orders.filter((o) => o.payment_status !== 'paid');
+  const overdueOrders = orders.filter((o) => {
+    if (!o.due_date) return false;
+    return new Date(o.due_date) < today && o.production_status !== 'delivered';
+  });
+  const clientsToContact = clients.filter((c) => {
+    if (!c.last_contacted) return true; // Never contacted
+    return new Date(c.last_contacted) < sevenDaysAgo;
+  });
+
+  const totalOutstanding = unpaidOrders.reduce((sum, o) => {
+    const total = o.total_amount || 0;
+    const paid = o.amount_paid || 0;
+    return sum + (total - paid);
+  }, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Quick stats cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl bg-white border border-gray-100 p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-500">Pending Orders</p>
+            <ClipboardDocumentListIcon className="h-5 w-5 text-gray-400" />
+          </div>
+          <p className="mt-2 text-2xl font-bold text-gray-900">{pendingOrders.length}</p>
+        </div>
+
+        <div className="rounded-xl bg-white border border-gray-100 p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-500">Unpaid Orders</p>
+            <BanknotesIcon className="h-5 w-5 text-gray-400" />
+          </div>
+          <p className="mt-2 text-2xl font-bold text-gray-900">{unpaidOrders.length}</p>
+        </div>
+
+        <div className="rounded-xl bg-white border border-gray-100 p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-500">Outstanding</p>
+            <BanknotesIcon className="h-5 w-5 text-amber-400" />
+          </div>
+          <p className="mt-2 text-2xl font-bold text-gray-900">${totalOutstanding.toFixed(2)}</p>
+        </div>
+
+        <div className="rounded-xl bg-white border border-gray-100 p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-500">Clients to Contact</p>
+            <UsersIcon className="h-5 w-5 text-gray-400" />
+          </div>
+          <p className="mt-2 text-2xl font-bold text-gray-900">{clientsToContact.length}</p>
+        </div>
+      </div>
+
+      {/* Action items */}
+      <div className="grid gap-6 lg:grid-cols-2">
+
+        {/* Overdue orders */}
+        {overdueOrders.length > 0 && (
+          <div className="rounded-xl bg-white border border-red-200 overflow-hidden">
+            <div className="bg-red-50 border-b border-red-200 px-5 py-3 flex items-center gap-2">
+              <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
+              <h3 className="font-semibold text-red-900">Overdue Orders ({overdueOrders.length})</h3>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {overdueOrders.slice(0, 5).map((o) => (
+                <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onNavigate('orders')}>
+                  <p className="text-sm font-medium text-gray-900">{o.clients?.name || 'Unknown'}</p>
+                  <p className="text-xs text-gray-500">Due: {new Date(o.due_date).toLocaleDateString()}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Clients to follow up */}
+        {clientsToContact.length > 0 && (
+          <div className="rounded-xl bg-white border border-amber-200 overflow-hidden">
+            <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 flex items-center gap-2">
+              <BellIcon className="h-5 w-5 text-amber-600" />
+              <h3 className="font-semibold text-amber-900">Follow Up ({clientsToContact.length})</h3>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {clientsToContact.slice(0, 5).map((c) => (
+                <div key={c.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onNavigate('clients')}>
+                  <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {c.last_contacted
+                      ? `Last contact: ${new Date(c.last_contacted).toLocaleDateString()}`
+                      : 'Never contacted'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Pending confirmation */}
+        {pendingOrders.length > 0 && (
+          <div className="rounded-xl bg-white border border-blue-200 overflow-hidden">
+            <div className="bg-blue-50 border-b border-blue-200 px-5 py-3 flex items-center gap-2">
+              <ClipboardDocumentListIcon className="h-5 w-5 text-blue-600" />
+              <h3 className="font-semibold text-blue-900">Pending Confirmation ({pendingOrders.length})</h3>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {pendingOrders.slice(0, 5).map((o) => (
+                <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onNavigate('orders')}>
+                  <p className="text-sm font-medium text-gray-900">{o.clients?.name || 'Unknown'}</p>
+                  <p className="text-xs text-gray-500">
+                    {o.order_items?.length || 0} items · {new Date(o.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Outstanding payments */}
+        {unpaidOrders.length > 0 && (
+          <div className="rounded-xl bg-white border border-green-200 overflow-hidden">
+            <div className="bg-green-50 border-b border-green-200 px-5 py-3 flex items-center gap-2">
+              <BanknotesIcon className="h-5 w-5 text-green-600" />
+              <h3 className="font-semibold text-green-900">Payment Pending ({unpaidOrders.length})</h3>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {unpaidOrders.slice(0, 5).map((o) => {
+                const total = o.total_amount || 0;
+                const paid = o.amount_paid || 0;
+                const due = total - paid;
+                return (
+                  <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onNavigate('orders')}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-900">{o.clients?.name || 'Unknown'}</p>
+                      <p className="text-sm font-bold text-green-700">${due.toFixed(2)}</p>
+                    </div>
+                    <p className="text-xs text-gray-500">{o.payment_status || 'unpaid'}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
-  const [tab, setTab] = useState('clients');
+  const [tab, setTab] = useState('dashboard');
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-6xl px-4 py-10 md:px-8">
@@ -152,6 +333,7 @@ export default function AdminPage() {
         </div>
         <div className="flex gap-1 mb-8 border-b border-gray-200">
           {[
+            ['dashboard', <HomeIcon className="h-4 w-4" key="d" />, 'Dashboard'],
             ['clients', <UsersIcon className="h-4 w-4" key="u" />, 'Clients'],
             ['products', <CubeIcon className="h-4 w-4" key="p" />, 'Products'],
             ['orders', <ShoppingBagIcon className="h-4 w-4" key="s" />, 'Orders'],
@@ -164,6 +346,7 @@ export default function AdminPage() {
             </button>
           ))}
         </div>
+        {tab === 'dashboard' && <DashboardTab onNavigate={setTab} />}
         {tab === 'clients' && <ClientsTab />}
         {tab === 'products' && <ProductsTab />}
         {tab === 'orders' && <OrdersTab />}
@@ -440,6 +623,26 @@ function ClientsTab() {
                   </div>
 
                   {c.notes && <p className="text-xs text-gray-400 mt-1 truncate">{c.notes}</p>}
+
+                  {/* Last contacted */}
+                  <div className="flex items-center gap-2 mt-2">
+                    {c.last_contacted ? (
+                      <span className="text-xs text-gray-400">
+                        Last contact: {new Date(c.last_contacted).toLocaleDateString()}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-amber-500">Never contacted</span>
+                    )}
+                    <button
+                      onClick={async () => {
+                        await markClientContacted(c.id);
+                        setClients((prev) => prev.map((x) => x.id === c.id ? { ...x, last_contacted: new Date().toISOString() } : x));
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Mark contacted
+                    </button>
+                  </div>
                 </div>
 
                 {/* Right: actions */}
@@ -1335,6 +1538,10 @@ function OrdersTab() {
       contacted: order.contacted || false,
       payment_received: order.payment_received || false,
       admin_notes: order.admin_notes || '',
+      production_status: order.production_status || 'pending',
+      payment_status: order.payment_status || 'unpaid',
+      amount_paid: order.amount_paid || 0,
+      total_amount: order.total_amount || 0,
       items: (order.order_items || []).map((i) => ({ ...i, _editing: false })),
     });
     const [hist, reqs] = await Promise.all([
@@ -1635,6 +1842,11 @@ function OrdersTab() {
               </div>
               {saveIndicator === 'saving' && <span className="text-xs text-gray-400 flex-shrink-0">Saving…</span>}
               {saveIndicator === 'saved' && <span className="text-xs text-green-500 flex-shrink-0">✓ Saved</span>}
+              <a href={`/factory-print/${selectedOrder.id}`} target="_blank" rel="noreferrer"
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">
+                <ClipboardDocumentListIcon className="h-4 w-4" />
+                Print
+              </a>
               <button onClick={closeDetail} className="text-gray-400 hover:text-gray-700 text-2xl leading-none flex-shrink-0">×</button>
             </div>
 
@@ -1662,6 +1874,65 @@ function OrdersTab() {
                     const v = e.target.value;
                     setOrderDetail((d) => d ? { ...d, due_date: v } : d);
                     saveFieldDebounced('due_date', v);
+                  }}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
+              </div>
+
+              {/* Production Status */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Production Status</label>
+                <select value={orderDetail.production_status}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setOrderDetail((d) => d ? { ...d, production_status: v } : d);
+                    saveField('production_status', v);
+                  }}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none">
+                  <option value="pending">Pending</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="in_production">In Production</option>
+                  <option value="ready">Ready to Ship</option>
+                  <option value="shipped">Shipped</option>
+                  <option value="delivered">Delivered</option>
+                </select>
+              </div>
+
+              {/* Payment Status */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Payment Status</label>
+                <select value={orderDetail.payment_status}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setOrderDetail((d) => d ? { ...d, payment_status: v } : d);
+                    saveField('payment_status', v);
+                  }}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none">
+                  <option value="unpaid">Unpaid</option>
+                  <option value="partial">Partial</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
+
+              {/* Total Amount */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Total Amount</label>
+                <input type="number" step="0.01" value={orderDetail.total_amount}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value) || 0;
+                    setOrderDetail((d) => d ? { ...d, total_amount: v } : d);
+                    saveFieldDebounced('total_amount', v);
+                  }}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
+              </div>
+
+              {/* Amount Paid */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Amount Paid</label>
+                <input type="number" step="0.01" value={orderDetail.amount_paid}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value) || 0;
+                    setOrderDetail((d) => d ? { ...d, amount_paid: v } : d);
+                    saveFieldDebounced('amount_paid', v);
                   }}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
               </div>

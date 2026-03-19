@@ -8,6 +8,7 @@ import OrderPage from './pages/OrderPage';
 import OrdersPage from './pages/OrdersPage';
 import AdminPage from './pages/AdminPage';
 import LoginPage from './pages/LoginPage';
+import FactoryPrintPage from './pages/FactoryPrintPage';
 import LoadingScreen from './components/LoadingScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
@@ -146,6 +147,7 @@ function AppInner() {
                 <Route path="order" element={<OrderPage />} />
                 <Route path="orders" element={<OrdersPage />} />
                 <Route path="admin" element={client?.isAdmin ? <AdminPage /> : <Navigate to="/" />} />
+                <Route path="factory-print/:orderId" element={client?.isAdmin ? <FactoryPrintPage /> : <Navigate to="/" />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </>
             )}

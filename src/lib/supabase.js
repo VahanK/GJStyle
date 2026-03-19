@@ -87,6 +87,14 @@ export async function fetchClients() {
   return sbFetch('/clients?select=*&order=name.asc');
 }
 
+export async function markClientContacted(clientId) {
+  return sbFetch(`/clients?id=eq.${clientId}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ last_contacted: new Date().toISOString() }),
+  });
+}
+
 export async function fetchClientByPassword(password) {
   const rows = await sbFetch(
     `/clients?password=eq.${encodeURIComponent(password)}&active=eq.true&select=*&limit=1`
@@ -240,7 +248,7 @@ export async function addOrderHistory(orderId, changedBy, description) {
 // Full orders for admin with new columns
 export async function fetchOrdersWithItemsFull() {
   return sbFetch(
-    '/orders?select=id,status,notes,admin_notes,due_date,contacted,payment_received,created_at,clients(id,name,whatsapp,instagram),order_items(id,quantity,plating,stone_color,notes,products(id,name,category,image_url,price))&order=created_at.desc'
+    '/orders?select=id,status,notes,admin_notes,due_date,contacted,payment_received,production_status,payment_status,amount_paid,total_amount,created_at,clients(id,name,whatsapp,instagram),order_items(id,quantity,plating,stone_color,notes,products(id,name,category,image_url,price))&order=created_at.desc'
   );
 }
 
