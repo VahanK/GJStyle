@@ -9,6 +9,8 @@ import {
   updateProduct, deleteProduct, createProduct, uploadProductImage,
   fetchClientPricing, setClientPrice, deleteClientPrice,
   logMessage,
+  fetchWorkflowSteps, upsertWorkflowStep, fetchAllWorkflowSteps,
+  fetchOrderFiles, uploadOrderFile, deleteOrderFile,
 } from '../lib/supabase';
 import {
   PlusIcon, PencilSquareIcon, TrashIcon,
@@ -345,17 +347,20 @@ function AnalyticsTab() {
 function DashboardTab({ onGoToOrder }) {
   const [orders, setOrders] = useState([]);
   const [changeRequests, setChangeRequests] = useState([]);
+  const [allWorkflow, setAllWorkflow] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [ordersData, crData] = await Promise.all([
+      const [ordersData, crData, wfData] = await Promise.all([
         fetchOrdersWithItemsFull(),
         fetchAllPendingChangeRequests(),
+        fetchAllWorkflowSteps(),
       ]);
       setOrders(ordersData);
       setChangeRequests(crData);
+      setAllWorkflow(wfData || []);
     } catch (e) {
       console.error('Dashboard load error:', e);
     } finally {
@@ -392,8 +397,25 @@ function DashboardTab({ onGoToOrder }) {
     return sum + Math.max(0, total - paid);
   }, 0);
 
+  // Workflow-based buckets
+  const wfByOrder = {};
+  allWorkflow.forEach((s) => {
+    if (!wfByOrder[s.order_id]) wfByOrder[s.order_id] = {};
+    wfByOrder[s.order_id][s.step_key] = s;
+  });
+  const needsFactoryFile = notCancelled.filter((o) => {
+    if (o.status === 'pending' || o.status === 'delivered' || o.status === 'shipped') return false;
+    const steps = wfByOrder[o.id] || {};
+    return !steps.factory_file_ready?.completed;
+  });
+  const needsSendToProduction = notCancelled.filter((o) => {
+    if (o.status === 'pending' || o.status === 'delivered' || o.status === 'shipped') return false;
+    const steps = wfByOrder[o.id] || {};
+    return steps.factory_file_ready?.completed && !steps.sent_to_production?.completed;
+  });
+
   // Count urgency for stats
-  const urgentCount = needsConfirmation.length + needsShipping.length + changeRequests.length + overdueOrders.length;
+  const urgentCount = needsConfirmation.length + needsShipping.length + changeRequests.length + overdueOrders.length + needsFactoryFile.length + needsSendToProduction.length;
 
   // Reusable order row
   const OrderRow = ({ order, extra, rightLabel }) => {
@@ -490,6 +512,22 @@ function DashboardTab({ onGoToOrder }) {
             </div>
           </div>
         )}
+
+        {/* Needs factory file */}
+        <Section
+          title="Needs Factory File" icon={ClipboardDocumentListIcon} count={needsFactoryFile.length}
+          color="text-orange-700" border="border-orange-200" bg="bg-orange-50"
+          orders={needsFactoryFile}
+          renderRow={(o) => <OrderRow key={o.id} order={o} extra="No production file" />}
+        />
+
+        {/* Needs to be sent to production */}
+        <Section
+          title="Send to Production" icon={CubeIcon} count={needsSendToProduction.length}
+          color="text-cyan-700" border="border-cyan-200" bg="bg-cyan-50"
+          orders={needsSendToProduction}
+          renderRow={(o) => <OrderRow key={o.id} order={o} extra="File ready, needs sending" />}
+        />
 
         {/* Needs shipping */}
         <Section
@@ -1981,6 +2019,9 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
   const [searchQ, setSearchQ] = useState('');
   const [addingItem, setAddingItem] = useState(false);
   const [itemSearch, setItemSearch] = useState('');
+  const [workflowSteps, setWorkflowSteps] = useState([]);
+  const [orderFiles, setOrderFiles] = useState([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const debounceRef = useRef(null);
   const selectedOrderRef = useRef(null);
 
@@ -2050,12 +2091,16 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
       resolution_status: order.resolution_status || 'pending',
       items: (order.order_items || []).map((i) => ({ ...i, _editing: false })),
     });
-    const [hist, reqs] = await Promise.all([
+    const [hist, reqs, wfSteps, files] = await Promise.all([
       fetchOrderHistory(order.id),
       fetchChangeRequests(order.id),
+      fetchWorkflowSteps(order.id),
+      fetchOrderFiles(order.id),
     ]);
     setHistory(hist || []);
     setChangeRequests(reqs || []);
+    setWorkflowSteps(wfSteps || []);
+    setOrderFiles(files || []);
   }
 
   function closeDetail() {
@@ -2622,6 +2667,149 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
                     onChange={(e) => { const v = e.target.value; setOrderDetail((d) => d ? { ...d, due_date: v } : d); saveFieldDebounced('due_date', v); }}
                     className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none" />
                 </div>
+              </div>
+
+              {/* ── Production Workflow ── */}
+              <div className="p-4 border-b border-gray-100 bg-white space-y-3">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Production Workflow</span>
+                {(() => {
+                  const WORKFLOW_STEPS = [
+                    { key: 'order_confirmed', label: 'Order Confirmed', desc: 'Client confirmed, order is a go' },
+                    { key: 'factory_file_ready', label: 'Factory File Ready', desc: 'Production file prepared & uploaded' },
+                    { key: 'sent_to_production', label: 'Sent to Production', desc: 'File sent to factory / workers' },
+                    { key: 'in_production', label: 'In Production', desc: 'Factory is working on it' },
+                    { key: 'qc_passed', label: 'QC Passed', desc: 'Quality check completed' },
+                    { key: 'packed', label: 'Packed', desc: 'Order packed and ready to ship' },
+                  ];
+                  const stepsMap = {};
+                  workflowSteps.forEach((s) => { stepsMap[s.step_key] = s; });
+                  const firstIncomplete = WORKFLOW_STEPS.findIndex((s) => !stepsMap[s.key]?.completed);
+
+                  async function toggleStep(stepKey, currentlyCompleted) {
+                    const newVal = !currentlyCompleted;
+                    try {
+                      await upsertWorkflowStep(selectedOrder.id, stepKey, {
+                        completed: newVal,
+                        completed_at: newVal ? new Date().toISOString() : null,
+                        completed_by: newVal ? 'admin' : null,
+                      });
+                      setWorkflowSteps((prev) => {
+                        const existing = prev.find((s) => s.step_key === stepKey);
+                        if (existing) return prev.map((s) => s.step_key === stepKey ? { ...s, completed: newVal, completed_at: newVal ? new Date().toISOString() : null } : s);
+                        return [...prev, { step_key: stepKey, completed: newVal, completed_at: new Date().toISOString(), order_id: selectedOrder.id }];
+                      });
+                    } catch (e) { console.error('Workflow step error:', e); }
+                  }
+
+                  async function handleFileUpload(e) {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setUploadingFile(true);
+                    try {
+                      const result = await uploadOrderFile(file, selectedOrder.id, 'factory_sheet', null);
+                      setOrderFiles((prev) => [].concat(result).concat(prev));
+                    } catch (err) { alert('Upload failed: ' + err.message); }
+                    finally { setUploadingFile(false); e.target.value = ''; }
+                  }
+
+                  async function handleDeleteFile(fileId) {
+                    if (!window.confirm('Delete this file?')) return;
+                    try {
+                      await deleteOrderFile(fileId);
+                      setOrderFiles((prev) => prev.filter((f) => f.id !== fileId));
+                    } catch (e) { alert('Delete failed'); }
+                  }
+
+                  const completedCount = WORKFLOW_STEPS.filter((s) => stepsMap[s.key]?.completed).length;
+                  const progress = Math.round((completedCount / WORKFLOW_STEPS.length) * 100);
+
+                  return (
+                    <>
+                      {/* Progress bar */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }} />
+                        </div>
+                        <span className="text-xs font-medium text-gray-500">{completedCount}/{WORKFLOW_STEPS.length}</span>
+                      </div>
+
+                      {/* Steps */}
+                      <div className="space-y-1">
+                        {WORKFLOW_STEPS.map((step, idx) => {
+                          const data = stepsMap[step.key];
+                          const done = data?.completed;
+                          const isCurrent = idx === firstIncomplete;
+                          return (
+                            <div key={step.key}
+                              className={`flex items-start gap-2.5 p-2 rounded-lg cursor-pointer transition-colors ${
+                                done ? 'bg-green-50 hover:bg-green-100' :
+                                isCurrent ? 'bg-blue-50 hover:bg-blue-100 ring-1 ring-blue-200' :
+                                'hover:bg-gray-50'
+                              }`}
+                              onClick={() => toggleStep(step.key, done)}
+                            >
+                              <div className={`mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                done ? 'bg-green-500 border-green-500' :
+                                isCurrent ? 'border-blue-400' : 'border-gray-300'
+                              }`}>
+                                {done && <CheckCircleIcon className="h-4 w-4 text-white" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm font-medium ${done ? 'text-green-700 line-through' : isCurrent ? 'text-blue-700' : 'text-gray-600'}`}>
+                                  {step.label}
+                                </p>
+                                <p className="text-xs text-gray-400">{step.desc}</p>
+                                {done && data?.completed_at && (
+                                  <p className="text-xs text-green-600 mt-0.5">{new Date(data.completed_at).toLocaleDateString()} {new Date(data.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Factory Files */}
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-gray-500">Factory Files</span>
+                          <label className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg cursor-pointer transition-colors ${uploadingFile ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                            <PlusIcon className="h-3.5 w-3.5" />
+                            {uploadingFile ? 'Uploading...' : 'Upload'}
+                            <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploadingFile} accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx" />
+                          </label>
+                        </div>
+                        {orderFiles.filter((f) => f.file_type === 'factory_sheet').length === 0 && (
+                          <p className="text-xs text-amber-500 italic">No factory file uploaded yet</p>
+                        )}
+                        <div className="space-y-1.5">
+                          {orderFiles.filter((f) => f.file_type === 'factory_sheet').map((f) => (
+                            <div key={f.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg group">
+                              <a href={f.file_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 text-xs font-medium text-blue-600 hover:underline truncate">
+                                {f.file_name}
+                              </a>
+                              <span className="text-xs text-gray-400 shrink-0">{new Date(f.created_at).toLocaleDateString()}</span>
+                              <button onClick={() => handleDeleteFile(f.id)} className="text-gray-300 hover:text-red-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <TrashIcon className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                          {/* Also show other file types if any */}
+                          {orderFiles.filter((f) => f.file_type !== 'factory_sheet').map((f) => (
+                            <div key={f.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg group">
+                              <a href={f.file_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 text-xs font-medium text-blue-600 hover:underline truncate">
+                                {f.file_name}
+                              </a>
+                              <span className="text-xs text-gray-400 shrink-0">{f.file_type}</span>
+                              <button onClick={() => handleDeleteFile(f.id)} className="text-gray-300 hover:text-red-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <TrashIcon className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Shipping */}

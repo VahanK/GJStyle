@@ -316,3 +316,59 @@ export async function logMessage(clientId, orderId, messageType, subject, body, 
 export async function fetchClientMessages(clientId) {
   return sbFetch(`/message_log?client_id=eq.${clientId}&select=*&order=sent_at.desc`);
 }
+
+// ── Order Workflow Steps ──────────────────────────────────────────────────────
+export async function fetchWorkflowSteps(orderId) {
+  return sbFetch(`/order_workflow_steps?order_id=eq.${orderId}&select=*&order=created_at.asc`);
+}
+
+export async function upsertWorkflowStep(orderId, stepKey, data) {
+  return sbFetch(`/order_workflow_steps`, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+    body: JSON.stringify({ order_id: orderId, step_key: stepKey, ...data }),
+  });
+}
+
+export async function fetchAllWorkflowSteps() {
+  return sbFetch(`/order_workflow_steps?select=*`);
+}
+
+// ── Order Files ───────────────────────────────────────────────────────────────
+export async function fetchOrderFiles(orderId) {
+  return sbFetch(`/order_files?order_id=eq.${orderId}&select=*&order=created_at.desc`);
+}
+
+export async function uploadOrderFile(file, orderId, fileType, notes) {
+  const ext = file.name.split('.').pop();
+  const filename = `order-${orderId}/${fileType}-${Date.now()}.${ext}`;
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/order-files/${filename}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': file.type,
+      'x-upsert': 'true',
+    },
+    body: file,
+  });
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+  const fileUrl = `${SUPABASE_URL}/storage/v1/object/public/order-files/${filename}`;
+  // Save record
+  return sbFetch('/order_files', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      order_id: orderId,
+      file_url: fileUrl,
+      file_name: file.name,
+      file_type: fileType,
+      uploaded_by: 'admin',
+      notes: notes || null,
+    }),
+  });
+}
+
+export async function deleteOrderFile(fileId) {
+  return sbFetch(`/order_files?id=eq.${fileId}`, { method: 'DELETE' });
+}
