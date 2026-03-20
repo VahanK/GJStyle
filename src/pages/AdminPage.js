@@ -453,31 +453,20 @@ function DashboardTab({ onGoToOrder }) {
   const today = new Date();
   const notCancelled = orders.filter((o) => o.status !== 'cancelled');
 
-  // ── Buckets ──
-  const needsConfirmation = notCancelled.filter((o) => o.status === 'pending');
-  const needsShipping = notCancelled.filter((o) =>
-    o.status === 'confirmed' && (o.production_status === 'ready' || o.production_status === 'delivered') && o.status !== 'shipped' && o.status !== 'delivered'
-  );
-  const inProduction = notCancelled.filter((o) =>
-    o.production_status === 'in_production' && o.status !== 'shipped' && o.status !== 'delivered'
-  );
-  const overdueOrders = notCancelled.filter((o) => {
-    if (!o.due_date) return false;
-    return new Date(o.due_date) < today && o.status !== 'delivered' && o.status !== 'shipped';
-  });
-  const unpaidOrders = notCancelled.filter((o) => o.payment_status !== 'paid');
-  const activeOrdersList = notCancelled.filter((o) => !(o.status === 'delivered' && o.payment_status === 'paid'));
-  const totalOutstanding = unpaidOrders.reduce((sum, o) => {
-    const total = (o.order_items || []).reduce((s, item) => s + (item.products?.price || 0) * (item.quantity || 1), 0);
-    const paid = o.amount_paid || 0;
-    return sum + Math.max(0, total - paid);
-  }, 0);
-
-  // Workflow-based buckets
+  // ── Workflow map ──
   const wfByOrder = {};
   allWorkflow.forEach((s) => {
     if (!wfByOrder[s.order_id]) wfByOrder[s.order_id] = {};
     wfByOrder[s.order_id][s.step_key] = s;
+  });
+
+  const active = notCancelled.filter((o) => !(o.status === 'delivered' && o.payment_status === 'paid'));
+
+  // ── NEEDS ACTION (things you must do) ──
+  const needsConfirmation = notCancelled.filter((o) => o.status === 'pending');
+  const overdueOrders = notCancelled.filter((o) => {
+    if (!o.due_date) return false;
+    return new Date(o.due_date) < today && o.status !== 'delivered' && o.status !== 'shipped';
   });
   const needsFactoryFile = notCancelled.filter((o) => {
     if (o.status === 'pending' || o.status === 'delivered' || o.status === 'shipped') return false;
@@ -489,9 +478,35 @@ function DashboardTab({ onGoToOrder }) {
     const steps = wfByOrder[o.id] || {};
     return steps.factory_file_ready?.completed && !steps.sent_to_production?.completed;
   });
+  const needsShipping = notCancelled.filter((o) => {
+    const steps = wfByOrder[o.id] || {};
+    return steps.packed?.completed && o.status !== 'shipped' && o.status !== 'delivered';
+  });
+  const actionCount = needsConfirmation.length + overdueOrders.length + changeRequests.length + needsFactoryFile.length + needsSendToProduction.length + needsShipping.length;
 
-  // Count urgency for stats
-  const urgentCount = needsConfirmation.length + needsShipping.length + changeRequests.length + overdueOrders.length + needsFactoryFile.length + needsSendToProduction.length;
+  // ── PRODUCTION & FULFILLMENT (where things are) ──
+  const inFactory = notCancelled.filter((o) => {
+    if (o.status === 'pending' || o.status === 'delivered' || o.status === 'shipped') return false;
+    const steps = wfByOrder[o.id] || {};
+    return steps.sent_to_production?.completed && !steps.production_complete?.completed;
+  });
+  const inFinishing = notCancelled.filter((o) => {
+    if (o.status === 'pending' || o.status === 'delivered' || o.status === 'shipped') return false;
+    const steps = wfByOrder[o.id] || {};
+    return steps.production_complete?.completed && !steps.packed?.completed;
+  });
+  const shipped = notCancelled.filter((o) => o.status === 'shipped' && o.status !== 'delivered');
+
+  // ── PAYMENT ──
+  const unpaidOrders = notCancelled.filter((o) => o.payment_status === 'unpaid' && o.status !== 'cancelled');
+  const partialOrders = notCancelled.filter((o) => o.payment_status === 'partial');
+  const allUnpaid = notCancelled.filter((o) => o.payment_status !== 'paid');
+  const totalOutstanding = allUnpaid.reduce((sum, o) => {
+    const total = (o.order_items || []).reduce((s, item) => s + (item.products?.price || 0) * (item.quantity || 1), 0);
+    const paid = o.amount_paid || 0;
+    return sum + Math.max(0, total - paid);
+  }, 0);
+  const totalCollected = notCancelled.reduce((sum, o) => sum + (o.amount_paid || 0), 0);
 
   // Reusable order row
   const OrderRow = ({ order, extra, rightLabel }) => {
@@ -527,20 +542,20 @@ function DashboardTab({ onGoToOrder }) {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Top stats */}
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
-        <div className={`rounded-xl border p-4 ${urgentCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
+        <div className={`rounded-xl border p-4 ${actionCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Needs Action</p>
-          <p className={`mt-1 text-2xl font-bold ${urgentCount > 0 ? 'text-red-600' : 'text-gray-900'}`}>{urgentCount}</p>
+          <p className={`mt-1 text-2xl font-bold ${actionCount > 0 ? 'text-red-600' : 'text-gray-900'}`}>{actionCount}</p>
         </div>
         <div className="rounded-xl bg-white border border-gray-100 p-4">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Active Orders</p>
-          <p className="mt-1 text-2xl font-bold text-gray-900">{activeOrdersList.length}</p>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Active</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900">{active.length}</p>
         </div>
-        <div className="rounded-xl bg-white border border-gray-100 p-4">
+        <div className={`rounded-xl border p-4 ${allUnpaid.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}`}>
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Unpaid</p>
-          <p className="mt-1 text-2xl font-bold text-gray-900">{unpaidOrders.length}</p>
+          <p className={`mt-1 text-2xl font-bold ${allUnpaid.length > 0 ? 'text-amber-600' : 'text-gray-900'}`}>{allUnpaid.length}</p>
         </div>
         <div className="rounded-xl bg-white border border-gray-100 p-4">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Outstanding</p>
@@ -548,101 +563,117 @@ function DashboardTab({ onGoToOrder }) {
         </div>
       </div>
 
-      {/* Urgent action sections */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Overdue */}
-        <Section
-          title="Overdue" icon={ExclamationTriangleIcon} count={overdueOrders.length}
-          color="text-red-700" border="border-red-200" bg="bg-red-50"
-          orders={overdueOrders}
-          renderRow={(o) => <OrderRow key={o.id} order={o} extra={`Due ${new Date(o.due_date).toLocaleDateString()}`} rightLabel={<span className="text-red-600">{Math.ceil((today - new Date(o.due_date)) / 86400000)}d late</span>} />}
-        />
-
-        {/* Needs confirmation */}
-        <Section
-          title="Needs Confirmation" icon={ClipboardDocumentListIcon} count={needsConfirmation.length}
-          color="text-blue-700" border="border-blue-200" bg="bg-blue-50"
-          orders={needsConfirmation}
-          renderRow={(o) => <OrderRow key={o.id} order={o} extra={new Date(o.created_at).toLocaleDateString()} />}
-        />
-
-        {/* Change requests */}
-        {changeRequests.length > 0 && (
-          <div className="rounded-xl bg-white border border-amber-200 overflow-hidden">
-            <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center gap-2">
-              <BellIcon className="h-5 w-5 text-amber-700" />
-              <h3 className="font-semibold text-sm text-amber-700">Change Requests</h3>
-              <span className="ml-auto text-xs font-bold text-amber-700 bg-white/60 rounded-full px-2 py-0.5">{changeRequests.length}</span>
-            </div>
-            <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
-              {changeRequests.map((cr) => (
-                <div key={cr.id} className="px-4 py-3 hover:bg-gray-50 cursor-pointer flex items-center gap-3" onClick={() => onGoToOrder(cr.order_id)}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{cr.orders?.clients?.name || 'Unknown'}</p>
-                    <p className="text-xs text-gray-500 truncate">{cr.message || cr.type || 'Change request'}</p>
-                  </div>
-                  <span className="text-xs text-amber-600 font-medium shrink-0">{new Date(cr.created_at).toLocaleDateString()}</span>
-                  <ChevronRightIcon className="h-4 w-4 text-gray-300 shrink-0" />
-                </div>
-              ))}
-            </div>
+      {/* ═══════ NEEDS ACTION ═══════ */}
+      {actionCount > 0 && (
+        <>
+          <div className="flex items-center gap-2 pt-2">
+            <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Needs Action</h2>
+            <span className="text-xs text-gray-400">— things you need to do</span>
           </div>
-        )}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Section title="Overdue" icon={ExclamationTriangleIcon} count={overdueOrders.length}
+              color="text-red-700" border="border-red-200" bg="bg-red-50" orders={overdueOrders}
+              renderRow={(o) => <OrderRow key={o.id} order={o} extra={`Due ${new Date(o.due_date).toLocaleDateString()}`} rightLabel={<span className="text-red-600">{Math.ceil((today - new Date(o.due_date)) / 86400000)}d late</span>} />} />
 
-        {/* Needs factory file */}
-        <Section
-          title="Needs Factory File" icon={ClipboardDocumentListIcon} count={needsFactoryFile.length}
-          color="text-orange-700" border="border-orange-200" bg="bg-orange-50"
-          orders={needsFactoryFile}
-          renderRow={(o) => <OrderRow key={o.id} order={o} extra="No production file" />}
-        />
+            <Section title="Needs Confirmation" icon={ClipboardDocumentListIcon} count={needsConfirmation.length}
+              color="text-blue-700" border="border-blue-200" bg="bg-blue-50" orders={needsConfirmation}
+              renderRow={(o) => <OrderRow key={o.id} order={o} extra={new Date(o.created_at).toLocaleDateString()} />} />
 
-        {/* Needs to be sent to production */}
-        <Section
-          title="Send to Production" icon={CubeIcon} count={needsSendToProduction.length}
-          color="text-cyan-700" border="border-cyan-200" bg="bg-cyan-50"
-          orders={needsSendToProduction}
-          renderRow={(o) => <OrderRow key={o.id} order={o} extra="File ready, needs sending" />}
-        />
+            {changeRequests.length > 0 && (
+              <div className="rounded-xl bg-white border border-amber-200 overflow-hidden">
+                <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center gap-2">
+                  <BellIcon className="h-5 w-5 text-amber-700" />
+                  <h3 className="font-semibold text-sm text-amber-700">Change Requests</h3>
+                  <span className="ml-auto text-xs font-bold text-amber-700 bg-white/60 rounded-full px-2 py-0.5">{changeRequests.length}</span>
+                </div>
+                <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                  {changeRequests.map((cr) => (
+                    <div key={cr.id} className="px-4 py-3 hover:bg-gray-50 cursor-pointer flex items-center gap-3" onClick={() => onGoToOrder(cr.order_id)}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{cr.orders?.clients?.name || 'Unknown'}</p>
+                        <p className="text-xs text-gray-500 truncate">{cr.message || cr.type || 'Change request'}</p>
+                      </div>
+                      <span className="text-xs text-amber-600 font-medium shrink-0">{new Date(cr.created_at).toLocaleDateString()}</span>
+                      <ChevronRightIcon className="h-4 w-4 text-gray-300 shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-        {/* Needs shipping */}
-        <Section
-          title="Ready to Ship" icon={CubeIcon} count={needsShipping.length}
-          color="text-purple-700" border="border-purple-200" bg="bg-purple-50"
-          orders={needsShipping}
-        />
-      </div>
+            <Section title="Needs Factory File" icon={ClipboardDocumentListIcon} count={needsFactoryFile.length}
+              color="text-orange-700" border="border-orange-200" bg="bg-orange-50" orders={needsFactoryFile}
+              renderRow={(o) => <OrderRow key={o.id} order={o} extra="No production file" />} />
 
-      {/* Status sections */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* In production */}
-        <Section
-          title="In Production" icon={CubeIcon} count={inProduction.length}
-          color="text-indigo-700" border="border-indigo-200" bg="bg-indigo-50"
-          orders={inProduction}
-          renderRow={(o) => <OrderRow key={o.id} order={o} extra={o.due_date ? `Due ${new Date(o.due_date).toLocaleDateString()}` : ''} />}
-        />
+            <Section title="Send to Production" icon={CubeIcon} count={needsSendToProduction.length}
+              color="text-cyan-700" border="border-cyan-200" bg="bg-cyan-50" orders={needsSendToProduction}
+              renderRow={(o) => <OrderRow key={o.id} order={o} extra="File ready, needs sending" />} />
 
-        {/* Payment pending */}
-        <Section
-          title="Payment Pending" icon={BanknotesIcon} count={unpaidOrders.length}
-          color="text-green-700" border="border-green-200" bg="bg-green-50"
-          orders={unpaidOrders}
-          renderRow={(o) => {
-            const total = (o.order_items || []).reduce((s, i) => s + (i.products?.price || 0) * (i.quantity || 1), 0);
-            const paid = o.amount_paid || 0;
-            const due = Math.max(0, total - paid);
-            return <OrderRow key={o.id} order={o} extra={o.payment_status === 'partial' ? 'Partial' : 'Unpaid'} rightLabel={<span className="text-green-700 font-bold">${due.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>} />;
-          }}
-        />
-      </div>
+            <Section title="Ready to Ship" icon={CubeIcon} count={needsShipping.length}
+              color="text-purple-700" border="border-purple-200" bg="bg-purple-50" orders={needsShipping} />
+          </div>
+        </>
+      )}
 
-      {/* All clear message */}
-      {urgentCount === 0 && (
-        <div className="text-center py-8">
-          <CheckCircleIcon className="h-12 w-12 text-green-400 mx-auto mb-2" />
-          <p className="text-gray-500">All caught up! No urgent items.</p>
+      {/* All clear */}
+      {actionCount === 0 && (
+        <div className="text-center py-6 bg-green-50 rounded-xl border border-green-200">
+          <CheckCircleIcon className="h-10 w-10 text-green-400 mx-auto mb-1" />
+          <p className="text-sm font-medium text-green-700">All caught up! No action items.</p>
         </div>
+      )}
+
+      {/* ═══════ ACTIVE ORDERS ═══════ */}
+      {(inFactory.length > 0 || inFinishing.length > 0 || shipped.length > 0) && (
+        <>
+          <div className="flex items-center gap-2 pt-2">
+            <div className="h-2 w-2 rounded-full bg-indigo-500" />
+            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Active Orders</h2>
+            <span className="text-xs text-gray-400">— where things are right now</span>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Section title="In Factory" icon={CubeIcon} count={inFactory.length}
+              color="text-indigo-700" border="border-indigo-200" bg="bg-indigo-50" orders={inFactory}
+              renderRow={(o) => <OrderRow key={o.id} order={o} extra={o.due_date ? `Due ${new Date(o.due_date).toLocaleDateString()}` : ''} />} />
+
+            <Section title="Finishing" icon={CubeIcon} count={inFinishing.length}
+              color="text-violet-700" border="border-violet-200" bg="bg-violet-50" orders={inFinishing}
+              renderRow={(o) => <OrderRow key={o.id} order={o} extra="QC / Stone gluing / Packing" />} />
+
+            <Section title="Shipped" icon={CubeIcon} count={shipped.length}
+              color="text-sky-700" border="border-sky-200" bg="bg-sky-50" orders={shipped}
+              renderRow={(o) => <OrderRow key={o.id} order={o} extra={o.tracking_number ? `#${o.tracking_number}` : 'No tracking'} />} />
+          </div>
+        </>
+      )}
+
+      {/* ═══════ PAYMENT ═══════ */}
+      {allUnpaid.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 pt-2">
+            <div className="h-2 w-2 rounded-full bg-amber-500" />
+            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Payment</h2>
+            <span className="text-xs text-gray-400">— ${totalOutstanding.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} outstanding</span>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Section title="Unpaid" icon={BanknotesIcon} count={unpaidOrders.length}
+              color="text-red-700" border="border-red-200" bg="bg-red-50" orders={unpaidOrders}
+              renderRow={(o) => {
+                const total = (o.order_items || []).reduce((s, i) => s + (i.products?.price || 0) * (i.quantity || 1), 0);
+                return <OrderRow key={o.id} order={o} extra="Not paid" rightLabel={<span className="text-red-600 font-bold">${total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>} />;
+              }} />
+
+            <Section title="Partial Payment" icon={BanknotesIcon} count={partialOrders.length}
+              color="text-amber-700" border="border-amber-200" bg="bg-amber-50" orders={partialOrders}
+              renderRow={(o) => {
+                const total = (o.order_items || []).reduce((s, i) => s + (i.products?.price || 0) * (i.quantity || 1), 0);
+                const paid = o.amount_paid || 0;
+                const due = Math.max(0, total - paid);
+                return <OrderRow key={o.id} order={o} extra={`$${paid.toLocaleString()} paid`} rightLabel={<span className="text-amber-700 font-bold">${due.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} due</span>} />;
+              }} />
+          </div>
+        </>
       )}
     </div>
   );
