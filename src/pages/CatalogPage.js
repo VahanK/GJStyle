@@ -1,7 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useProducts } from '../App';
-import { ChevronLeftIcon, FunnelIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../context/AuthContext';
+import { useFavorites } from '../context/FavoritesContext';
+import { ChevronLeftIcon, FunnelIcon, HeartIcon } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
 
 const PLATING_COLORS = {
   Gold: 'bg-yellow-400',
@@ -135,10 +138,25 @@ export default function CatalogPage() {
 
 function ProductCard({ product }) {
   const image = product.image_url || null;
+  const { client } = useAuth();
+  const { favoriteIds, toggle } = useFavorites();
+  const isFav = favoriteIds.has(product.id);
+  const showHeart = client && !client.isAdmin;
 
   return (
-    <Link to={`/product/${product.id}`}
-      className="group flex flex-col rounded-xl overflow-hidden border border-gray-100 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+    <div className="group relative flex flex-col rounded-xl overflow-hidden border border-gray-100 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+      {/* Heart button */}
+      {showHeart && (
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggle(product.id); }}
+          className="absolute top-2 right-2 z-10 h-8 w-8 rounded-full bg-white/80 backdrop-blur flex items-center justify-center shadow-sm hover:bg-white transition-colors"
+        >
+          {isFav
+            ? <HeartSolid className="h-4.5 w-4.5 text-red-500" />
+            : <HeartIcon className="h-4.5 w-4.5 text-gray-400" />}
+        </button>
+      )}
+      <Link to={`/product/${product.id}`} className="flex flex-col flex-1">
       {/* Image */}
       <div className="relative h-56 bg-gray-50 overflow-hidden">
         {image ? (
@@ -174,6 +192,7 @@ function ProductCard({ product }) {
           <p className="text-xs text-gray-400 italic">Price on request</p>
         )}
       </div>
-    </Link>
+      </Link>
+    </div>
   );
 }

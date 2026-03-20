@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProducts } from '../App';
 import {
-  fetchClients, createClient, updateClient, deleteClient,
+  fetchClients, createClient, updateClient, deleteClient, markClientContacted,
   fetchOrdersWithItemsFull, updateOrderAdmin,
   updateOrderItem, deleteOrderItem, addOrderItem,
   fetchAllPendingChangeRequests, fetchChangeRequests, updateChangeRequest,
   fetchOrderHistory, addOrderHistory,
   updateProduct, deleteProduct, createProduct, uploadProductImage,
+  fetchClientPricing, setClientPrice, deleteClientPrice,
+  logMessage, fetchClientMessages,
 } from '../lib/supabase';
 import {
   PlusIcon, PencilSquareIcon, TrashIcon,
@@ -624,6 +626,141 @@ export default function AdminPage() {
   );
 }
 
+// Custom pricing per client — inline in client edit modal
+function ClientPricingSection({ clientId, products }) {
+  const [pricing, setPricing] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState(false);
+  const [pendingPrices, setPendingPrices] = useState({}); // { productId: inputValue }
+  const debounceRefs = useRef({});
+
+  useEffect(() => {
+    fetchClientPricing(clientId).then((data) => {
+      setPricing(data || []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [clientId]);
+
+  function debouncedSetPrice(productId, value) {
+    const numVal = parseFloat(value);
+    if (debounceRefs.current[productId]) clearTimeout(debounceRefs.current[productId]);
+    debounceRefs.current[productId] = setTimeout(async () => {
+      if (!isNaN(numVal) && numVal > 0) {
+        await setClientPrice(clientId, productId, numVal);
+        setPricing((prev) => {
+          const exists = prev.find((p) => p.product_id === productId);
+          if (exists) return prev.map((p) => p.product_id === productId ? { ...p, custom_price: numVal } : p);
+          return [...prev, { client_id: clientId, product_id: productId, custom_price: numVal }];
+        });
+      }
+    }, 800);
+  }
+
+  async function handleRemovePrice(productId) {
+    await deleteClientPrice(clientId, productId);
+    setPricing((prev) => prev.filter((p) => p.product_id !== productId));
+    setPendingPrices((prev) => { const n = { ...prev }; delete n[productId]; return n; });
+  }
+
+  async function addProductToPrice(product) {
+    const defaultPrice = Math.round(product.price || 0);
+    setPendingPrices((prev) => ({ ...prev, [product.id]: String(defaultPrice) }));
+    await setClientPrice(clientId, product.id, defaultPrice);
+    setPricing((prev) => [...prev, { client_id: clientId, product_id: product.id, custom_price: defaultPrice }]);
+    setSearch('');
+  }
+
+  const pricedProducts = pricing.map((p) => {
+    const product = products.find((pr) => pr.id === p.product_id);
+    return { ...p, product };
+  }).filter((p) => p.product);
+
+  const pricedIds = new Set(pricing.map((p) => p.product_id));
+  const searchResults = search.length >= 2
+    ? products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()) && !pricedIds.has(p.id)).slice(0, 8)
+    : [];
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Custom Pricing</h3>
+        <button type="button" onClick={() => setOpen((o) => !o)}
+          className="text-xs text-gray-500 underline hover:text-gray-800">
+          {open ? 'Hide' : `Manage${pricedProducts.length ? ` (${pricedProducts.length})` : ''}`}
+        </button>
+      </div>
+
+      {loading && <p className="text-xs text-gray-400">Loading pricing...</p>}
+
+      {open && (
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          {/* Search to add */}
+          <div className="p-3 bg-gray-50 border-b border-gray-200">
+            <div className="relative">
+              <MagnifyingGlassIcon className="absolute left-2.5 top-2 h-4 w-4 text-gray-400" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search product to add custom price..."
+                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:border-gray-400 focus:outline-none" />
+            </div>
+            {searchResults.length > 0 && (
+              <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+                {searchResults.map((p) => (
+                  <button key={p.id} type="button" onClick={() => addProductToPrice(p)}
+                    className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-blue-50 transition-colors">
+                    {p.image_url && <img src={p.image_url} alt="" className="h-8 w-8 rounded object-cover flex-shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-800 truncate">{p.name}</p>
+                      <p className="text-xs text-gray-400">{p.category} · Base: ${Math.round(p.price || 0)}</p>
+                    </div>
+                    <span className="text-xs text-blue-600 font-medium flex-shrink-0">+ Add</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Existing custom prices */}
+          {pricedProducts.length > 0 ? (
+            <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+              {pricedProducts.map((p) => {
+                const inputVal = pendingPrices[p.product_id] !== undefined
+                  ? pendingPrices[p.product_id]
+                  : String(Math.round(p.custom_price));
+                return (
+                  <div key={p.product_id} className="flex items-center gap-3 px-3 py-2">
+                    {p.product?.image_url && <img src={p.product.image_url} alt="" className="h-8 w-8 rounded object-cover flex-shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-800 truncate">{p.product?.name}</p>
+                      <p className="text-xs text-gray-400">Base: ${Math.round(p.product?.price || 0)}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-xs text-gray-400">$</span>
+                      <input type="text" inputMode="numeric" value={inputVal}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (/^\d*$/.test(v)) {
+                            setPendingPrices((prev) => ({ ...prev, [p.product_id]: v }));
+                            debouncedSetPrice(p.product_id, v);
+                          }
+                        }}
+                        className="w-14 text-right rounded-lg border border-gray-200 px-2 py-1 text-xs font-bold text-gray-900 focus:border-gray-400 focus:outline-none" />
+                      <button type="button" onClick={() => handleRemovePrice(p.product_id)}
+                        className="ml-1 text-gray-300 hover:text-red-500 transition-colors text-sm leading-none">×</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="px-3 py-4 text-xs text-gray-400 text-center">No custom prices set. Search above to add.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Searchable individual product picker for client visibility
 function IndividualProductsPicker({ allProducts, selectedIds, onChange }) {
   const [search, setSearch] = useState('');
@@ -1047,6 +1184,9 @@ function ClientsTab() {
                 selectedIds={form.allowed_product_ids}
                 onChange={(ids) => setForm((f) => ({ ...f, allowed_product_ids: ids }))}
               />
+
+              {/* Custom Pricing — only show for existing clients */}
+              {editing && <ClientPricingSection clientId={editing.id} products={products} />}
 
               {/* Notes */}
               <div>
@@ -2117,6 +2257,16 @@ function OrdersTab() {
               </div>
               {saveIndicator === 'saving' && <span className="text-xs text-gray-400 flex-shrink-0">Saving…</span>}
               {saveIndicator === 'saved' && <span className="text-xs text-green-500 flex-shrink-0">✓ Saved</span>}
+              <a href={`/invoice/${selectedOrder.id}`} target="_blank" rel="noreferrer"
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 flex-shrink-0">
+                <BanknotesIcon className="h-4 w-4" />
+                Invoice
+              </a>
+              <a href={`/factory-print/${selectedOrder.id}`} target="_blank" rel="noreferrer"
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 flex-shrink-0">
+                <ClipboardDocumentListIcon className="h-4 w-4" />
+                Factory
+              </a>
               <button onClick={closeDetail} className="text-gray-400 hover:text-gray-700 text-2xl leading-none flex-shrink-0">×</button>
             </div>
 
@@ -2302,6 +2452,37 @@ function OrdersTab() {
                   </a>
                 )}
               </div>
+
+              {/* Quick WhatsApp Messages */}
+              {selectedOrder.clients?.whatsapp && (
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-500 mb-2">Quick Messages</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: 'Order Confirmed', msg: () => `Hi ${selectedOrder.clients?.name}! Your order #${selectedOrder.id} has been confirmed and is being processed. We'll keep you updated!` },
+                      { label: 'In Production', msg: () => `Hi ${selectedOrder.clients?.name}! Your order #${selectedOrder.id} is now in production. We'll notify you once it's ready.` },
+                      { label: 'Ready to Ship', msg: () => `Hi ${selectedOrder.clients?.name}! Great news — your order #${selectedOrder.id} is ready and will be shipped soon!` },
+                      { label: 'Shipped', msg: () => `Hi ${selectedOrder.clients?.name}! Your order #${selectedOrder.id} has been shipped${orderDetail.tracking_number ? `. Tracking: ${orderDetail.tracking_number}` : ''}. Let us know when it arrives!` },
+                      { label: 'Payment Reminder', msg: () => `Hi ${selectedOrder.clients?.name}! Friendly reminder about the balance on order #${selectedOrder.id}${orderDetail.total_amount ? ` ($${Math.round(orderDetail.total_amount - (orderDetail.amount_paid || 0))} remaining)` : ''}. Please let us know if you have any questions.` },
+                    ].map((t) => {
+                      const phone = selectedOrder.clients.whatsapp.replace(/\D/g, '');
+                      return (
+                        <a key={t.label}
+                          href={`https://wa.me/${phone}?text=${encodeURIComponent(t.msg())}`}
+                          target="_blank" rel="noreferrer"
+                          onClick={async () => {
+                            try {
+                              await logMessage(selectedOrder.clients.id, selectedOrder.id, 'whatsapp', t.label, t.msg(), 'Admin');
+                            } catch (_) {}
+                          }}
+                          className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-green-50 hover:border-green-300 hover:text-green-700 transition-colors">
+                          {t.label}
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Admin notes — debounced save */}
               <div className="col-span-2">

@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useProducts } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useFavorites } from '../context/FavoritesContext';
 import {
-  ChevronLeftIcon, ShoppingBagIcon, CheckIcon, PlusIcon, TrashIcon,
+  ChevronLeftIcon, ShoppingBagIcon, CheckIcon, PlusIcon, TrashIcon, HeartIcon,
 } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
 
 const PLATING_COLORS = {
   gold: 'bg-yellow-400 border-yellow-500',
@@ -29,7 +32,9 @@ function emptyVariant() {
 export default function ProductPage() {
   const { id } = useParams();
   const { products, allProducts } = useProducts();
+  const { client } = useAuth();
   const { addItem, totalItems } = useCart();
+  const { favoriteIds, toggle: toggleFavorite } = useFavorites();
   const navigate = useNavigate();
 
   const product = products.find((p) => String(p.id) === String(id));
@@ -164,7 +169,17 @@ export default function ProductPage() {
               ))}
             </div>
 
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">{product.name}</h1>
+            <div className="flex items-center gap-3 mb-2">
+              <h1 className="text-2xl font-bold text-gray-900">{product.name}</h1>
+              {client && !client.isAdmin && (
+                <button onClick={() => toggleFavorite(product.id)}
+                  className="flex-shrink-0 p-1 rounded-full hover:bg-gray-100 transition-colors">
+                  {favoriteIds.has(product.id)
+                    ? <HeartSolid className="h-6 w-6 text-red-500" />
+                    : <HeartIcon className="h-6 w-6 text-gray-300 hover:text-red-300" />}
+                </button>
+              )}
+            </div>
 
             {product.price && (
               <p className="text-xl font-semibold text-gray-900 mb-6">${Math.round(product.price)}</p>

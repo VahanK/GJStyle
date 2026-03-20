@@ -1,8 +1,9 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { Bars3Icon, XMarkIcon, ShoppingBagIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
+import { Bars3Icon, XMarkIcon, ShoppingBagIcon, ArrowRightOnRectangleIcon, HeartIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useFavorites } from '../context/FavoritesContext';
 
 const CATEGORIES = ['Earrings','Rings','Bracelets','Necklaces','Sets','Pendants','Armlets','Shambala'];
 
@@ -11,6 +12,7 @@ export default function Navbar() {
   const location = useLocation();
   const { client, logout } = useAuth();
   const { totalItems } = useCart();
+  const { favoriteIds } = useFavorites();
 
   function isActive(path) { return location.pathname === path; }
   function isCatActive(cat) { return location.pathname === `/catalog/${encodeURIComponent(cat)}`; }
@@ -38,6 +40,11 @@ export default function Navbar() {
           {!client?.isAdmin && (
             <>
               <span className="mx-2 text-gray-200">|</span>
+              <Link to="/favorites"
+                className={`rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${isActive('/favorites') ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}>
+                <HeartIcon className="h-4 w-4" /> Favorites
+                {favoriteIds.size > 0 && <span className="text-xs text-gray-400">({favoriteIds.size})</span>}
+              </Link>
               <Link to="/orders"
                 className={`rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors ${isActive('/orders') ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}>
                 My Orders
@@ -98,6 +105,7 @@ export default function Navbar() {
             {!client?.isAdmin && (
               <>
                 <div className="my-1 border-t border-gray-100" />
+                <Link to="/favorites" onClick={() => setMobileOpen(false)} className="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Favorites{favoriteIds.size > 0 ? ` (${favoriteIds.size})` : ''}</Link>
                 <Link to="/orders" onClick={() => setMobileOpen(false)} className="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">My Orders</Link>
               </>
             )}

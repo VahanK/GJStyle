@@ -9,9 +9,12 @@ import OrdersPage from './pages/OrdersPage';
 import AdminPage from './pages/AdminPage';
 import LoginPage from './pages/LoginPage';
 import FactoryPrintPage from './pages/FactoryPrintPage';
+import FavoritesPage from './pages/FavoritesPage';
+import InvoicePage from './pages/InvoicePage';
 import LoadingScreen from './components/LoadingScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { FavoritesProvider } from './context/FavoritesContext';
 import './App.css';
 
 // Global products context
@@ -132,6 +135,7 @@ function AppInner() {
     // allProducts = everything including deleted/variants (admin only)
     <ProductsContext.Provider value={{ products: visibleProducts, allProducts: products }}>
       <CartProvider>
+        <FavoritesProvider>
         <Router>
           {client && <Navbar />}
           <Routes>
@@ -146,13 +150,16 @@ function AppInner() {
                 <Route path="product/:id" element={<ProductPage />} />
                 <Route path="order" element={<OrderPage />} />
                 <Route path="orders" element={<OrdersPage />} />
+                <Route path="favorites" element={<FavoritesPage />} />
                 <Route path="admin" element={client?.isAdmin ? <AdminPage /> : <Navigate to="/" />} />
                 <Route path="factory-print/:orderId" element={client?.isAdmin ? <FactoryPrintPage /> : <Navigate to="/" />} />
+                <Route path="invoice/:orderId" element={client?.isAdmin ? <InvoicePage /> : <Navigate to="/" />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </>
             )}
           </Routes>
         </Router>
+        </FavoritesProvider>
       </CartProvider>
     </ProductsContext.Provider>
   );
