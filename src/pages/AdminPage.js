@@ -8,14 +8,14 @@ import {
   fetchOrderHistory, addOrderHistory,
   updateProduct, deleteProduct, createProduct, uploadProductImage,
   fetchClientPricing, setClientPrice, deleteClientPrice,
-  logMessage, fetchClientMessages,
+  logMessage,
 } from '../lib/supabase';
 import {
   PlusIcon, PencilSquareIcon, TrashIcon,
   CheckCircleIcon, XCircleIcon,
   ShoppingBagIcon, UsersIcon, ChevronDownIcon, ChevronRightIcon,
   CubeIcon, MagnifyingGlassIcon, PhotoIcon, BellIcon,
-  CalendarIcon, HomeIcon, ExclamationTriangleIcon, BanknotesIcon,
+  HomeIcon, ExclamationTriangleIcon, BanknotesIcon,
   ClipboardDocumentListIcon, ChartBarIcon,
 } from '@heroicons/react/24/outline';
 
@@ -146,7 +146,6 @@ function TagEditor({ label, values, onChange, suggestions }) {
 
 // ── ANALYTICS TAB ────────────────────────────────────────────────────────────
 function AnalyticsTab() {
-  const { products } = useProducts();
   const [orders, setOrders] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -344,20 +343,14 @@ function AnalyticsTab() {
 
 // ── DASHBOARD TAB ────────────────────────────────────────────────────────────
 function DashboardTab({ onGoToOrder }) {
-  const { products } = useProducts();
   const [orders, setOrders] = useState([]);
-  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [ordersData, clientsData] = await Promise.all([
-        fetchOrdersWithItemsFull(),
-        fetchClients(),
-      ]);
+      const ordersData = await fetchOrdersWithItemsFull();
       setOrders(ordersData);
-      setClients(clientsData);
     } catch (e) {
       console.error('Dashboard load error:', e);
     } finally {
@@ -1970,6 +1963,7 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
       }
       if (onFocusHandled) onFocusHandled();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusOrderId, orders]);
 
   async function openOrderDetail(order) {
