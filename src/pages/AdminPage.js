@@ -506,7 +506,6 @@ function DashboardTab({ onGoToOrder }) {
     const paid = o.amount_paid || 0;
     return sum + Math.max(0, total - paid);
   }, 0);
-  const totalCollected = notCancelled.reduce((sum, o) => sum + (o.amount_paid || 0), 0);
 
   // Reusable order row
   const OrderRow = ({ order, extra, rightLabel }) => {
