@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProducts } from '../App';
 import {
-  fetchClients, createClient, updateClient, deleteClient, markClientContacted,
+  fetchClients, createClient, updateClient, deleteClient,
   fetchOrdersWithItemsFull, updateOrderAdmin,
   updateOrderItem, deleteOrderItem, addOrderItem,
   fetchAllPendingChangeRequests, fetchChangeRequests, updateChangeRequest,
@@ -215,6 +215,7 @@ function AnalyticsTab() {
         productSales[pid] = {
           name: item.products.name,
           category: item.products.category,
+          image_url: item.products.image_url,
           quantity: 0,
           revenue: 0,
           orders: 0,
@@ -227,34 +228,7 @@ function AnalyticsTab() {
   });
 
   const bestsellers = Object.values(productSales)
-    .sort((a, b) => b.quantity - a.quantity)
-    .slice(0, 10);
-
-  const slowMovers = Object.values(productSales)
-    .sort((a, b) => a.quantity - b.quantity)
-    .slice(0, 10);
-
-  // PLATING/STONE TRENDS
-  const platingCount = {};
-  const stoneCount = {};
-  filteredOrders.forEach((o) => {
-    (o.order_items || []).forEach((item) => {
-      if (item.plating) {
-        platingCount[item.plating] = (platingCount[item.plating] || 0) + (item.quantity || 0);
-      }
-      if (item.stone_color) {
-        stoneCount[item.stone_color] = (stoneCount[item.stone_color] || 0) + (item.quantity || 0);
-      }
-    });
-  });
-
-  const topPlatings = Object.entries(platingCount)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
-
-  const topStones = Object.entries(stoneCount)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+    .sort((a, b) => b.quantity - a.quantity);
 
   // REVENUE ANALYTICS
   const totalRevenue = filteredOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
@@ -319,17 +293,24 @@ function AnalyticsTab() {
 
         {/* Bestsellers */}
         <div className="rounded-xl bg-white border border-gray-100 overflow-hidden">
-          <div className="border-b border-gray-100 px-5 py-3">
+          <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">Bestsellers</h3>
+            <span className="text-xs text-gray-400">{bestsellers.length} products</span>
           </div>
-          <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+          <div className="divide-y divide-gray-100 max-h-[480px] overflow-y-auto">
             {bestsellers.map((p, i) => (
-              <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
+              <div key={i} className="px-5 py-2.5 flex items-center gap-3 hover:bg-gray-50">
+                <span className="text-xs font-bold text-gray-400 w-5 text-right shrink-0">#{i + 1}</span>
+                <div className="h-10 w-10 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+                  {p.image_url
+                    ? <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
+                    : <div className="h-full flex items-center justify-center text-sm opacity-20">💍</div>}
+                </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
                   <p className="text-xs text-gray-500">{p.category} · {p.orders} orders</p>
                 </div>
-                <div className="text-right ml-4">
+                <div className="text-right ml-2 shrink-0">
                   <p className="text-sm font-bold text-gray-900">{p.quantity} sold</p>
                   <p className="text-xs text-gray-500">${p.revenue.toFixed(2)}</p>
                 </div>
@@ -355,64 +336,14 @@ function AnalyticsTab() {
           </div>
         )}
 
-        {/* Slow movers */}
-        {slowMovers.length > 0 && (
-          <div className="rounded-xl bg-white border border-gray-100 overflow-hidden">
-            <div className="border-b border-gray-100 px-5 py-3">
-              <h3 className="font-semibold text-gray-900">Slow Movers</h3>
-            </div>
-            <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
-              {slowMovers.map((p, i) => (
-                <div key={i} className="px-5 py-2 hover:bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
-                    <p className="text-sm text-gray-500 ml-2">{p.quantity} sold</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Trends */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Top platings */}
-        {topPlatings.length > 0 && (
-          <div className="rounded-xl bg-white border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-900 mb-3">Popular Platings</h3>
-            <div className="space-y-2">
-              {topPlatings.map(([plating, count]) => (
-                <div key={plating} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700 capitalize">{plating}</span>
-                  <span className="text-sm font-semibold text-gray-900">{count} items</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Top stones */}
-        {topStones.length > 0 && (
-          <div className="rounded-xl bg-white border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-900 mb-3">Popular Stone Colors</h3>
-            <div className="space-y-2">
-              {topStones.map(([stone, count]) => (
-                <div key={stone} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700 capitalize">{stone}</span>
-                  <span className="text-sm font-semibold text-gray-900">{count} items</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
 
 // ── DASHBOARD TAB ────────────────────────────────────────────────────────────
-function DashboardTab({ onNavigate }) {
+function DashboardTab({ onGoToOrder }) {
   const { products } = useProducts();
   const [orders, setOrders] = useState([]);
   const [clients, setClients] = useState([]);
@@ -442,35 +373,34 @@ function DashboardTab({ onNavigate }) {
 
   // Calculate action items
   const today = new Date();
-  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const pendingOrders = orders.filter((o) => o.production_status === 'pending');
-  const unpaidOrders = orders.filter((o) => o.payment_status !== 'paid');
+  const activeOrdersList = orders.filter((o) => {
+    if (o.status === 'cancelled') return false;
+    if (o.status === 'delivered' && o.payment_status === 'paid') return false;
+    return true;
+  });
+  const pendingOrders = orders.filter((o) => o.status === 'pending');
+  const unpaidOrders = orders.filter((o) => o.payment_status !== 'paid' && o.status !== 'cancelled');
   const overdueOrders = orders.filter((o) => {
     if (!o.due_date) return false;
     return new Date(o.due_date) < today && o.production_status !== 'delivered';
   });
-  const clientsToContact = clients.filter((c) => {
-    if (!c.last_contacted) return true; // Never contacted
-    return new Date(c.last_contacted) < sevenDaysAgo;
-  });
-
   const totalOutstanding = unpaidOrders.reduce((sum, o) => {
-    const total = o.total_amount || 0;
+    const total = (o.order_items || []).reduce((s, item) => s + (item.products?.price || 0) * (item.quantity || 1), 0);
     const paid = o.amount_paid || 0;
-    return sum + (total - paid);
+    return sum + Math.max(0, total - paid);
   }, 0);
 
   return (
     <div className="space-y-6">
       {/* Quick stats cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-xl bg-white border border-gray-100 p-5">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-500">Pending Orders</p>
+            <p className="text-sm font-medium text-gray-500">Active Orders</p>
             <ClipboardDocumentListIcon className="h-5 w-5 text-gray-400" />
           </div>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{pendingOrders.length}</p>
+          <p className="mt-2 text-2xl font-bold text-gray-900">{activeOrdersList.length}</p>
         </div>
 
         <div className="rounded-xl bg-white border border-gray-100 p-5">
@@ -489,13 +419,6 @@ function DashboardTab({ onNavigate }) {
           <p className="mt-2 text-2xl font-bold text-gray-900">${totalOutstanding.toFixed(2)}</p>
         </div>
 
-        <div className="rounded-xl bg-white border border-gray-100 p-5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-500">Clients to Contact</p>
-            <UsersIcon className="h-5 w-5 text-gray-400" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{clientsToContact.length}</p>
-        </div>
       </div>
 
       {/* Action items */}
@@ -510,7 +433,7 @@ function DashboardTab({ onNavigate }) {
             </div>
             <div className="divide-y divide-gray-100">
               {overdueOrders.slice(0, 5).map((o) => (
-                <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onNavigate('orders')}>
+                <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onGoToOrder(o.id)}>
                   <p className="text-sm font-medium text-gray-900">{o.clients?.name || 'Unknown'}</p>
                   <p className="text-xs text-gray-500">Due: {new Date(o.due_date).toLocaleDateString()}</p>
                 </div>
@@ -519,27 +442,6 @@ function DashboardTab({ onNavigate }) {
           </div>
         )}
 
-        {/* Clients to follow up */}
-        {clientsToContact.length > 0 && (
-          <div className="rounded-xl bg-white border border-amber-200 overflow-hidden">
-            <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 flex items-center gap-2">
-              <BellIcon className="h-5 w-5 text-amber-600" />
-              <h3 className="font-semibold text-amber-900">Follow Up ({clientsToContact.length})</h3>
-            </div>
-            <div className="divide-y divide-gray-100">
-              {clientsToContact.slice(0, 5).map((c) => (
-                <div key={c.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onNavigate('clients')}>
-                  <p className="text-sm font-medium text-gray-900">{c.name}</p>
-                  <p className="text-xs text-gray-500">
-                    {c.last_contacted
-                      ? `Last contact: ${new Date(c.last_contacted).toLocaleDateString()}`
-                      : 'Never contacted'}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Pending confirmation */}
         {pendingOrders.length > 0 && (
@@ -550,7 +452,7 @@ function DashboardTab({ onNavigate }) {
             </div>
             <div className="divide-y divide-gray-100">
               {pendingOrders.slice(0, 5).map((o) => (
-                <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onNavigate('orders')}>
+                <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onGoToOrder(o.id)}>
                   <p className="text-sm font-medium text-gray-900">{o.clients?.name || 'Unknown'}</p>
                   <p className="text-xs text-gray-500">
                     {o.order_items?.length || 0} items · {new Date(o.created_at).toLocaleDateString()}
@@ -574,7 +476,7 @@ function DashboardTab({ onNavigate }) {
                 const paid = o.amount_paid || 0;
                 const due = total - paid;
                 return (
-                  <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onNavigate('orders')}>
+                  <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onGoToOrder(o.id)}>
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-medium text-gray-900">{o.clients?.name || 'Unknown'}</p>
                       <p className="text-sm font-bold text-green-700">${due.toFixed(2)}</p>
@@ -593,6 +495,13 @@ function DashboardTab({ onNavigate }) {
 
 export default function AdminPage() {
   const [tab, setTab] = useState('dashboard');
+  const [focusOrderId, setFocusOrderId] = useState(null);
+
+  function goToOrder(orderId) {
+    setFocusOrderId(orderId);
+    setTab('orders');
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-6xl px-4 py-10 md:px-8">
@@ -608,7 +517,7 @@ export default function AdminPage() {
             ['products', <CubeIcon className="h-4 w-4" key="p" />, 'Products'],
             ['orders', <ShoppingBagIcon className="h-4 w-4" key="s" />, 'Orders'],
           ].map(([key, icon, label]) => (
-            <button key={key} onClick={() => setTab(key)}
+            <button key={key} onClick={() => { setTab(key); setFocusOrderId(null); }}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 tab === key ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}>
@@ -616,11 +525,11 @@ export default function AdminPage() {
             </button>
           ))}
         </div>
-        {tab === 'dashboard' && <DashboardTab onNavigate={setTab} />}
+        {tab === 'dashboard' && <DashboardTab onGoToOrder={goToOrder} />}
         {tab === 'analytics' && <AnalyticsTab />}
         {tab === 'clients' && <ClientsTab />}
         {tab === 'products' && <ProductsTab />}
-        {tab === 'orders' && <OrdersTab />}
+        {tab === 'orders' && <OrdersTab focusOrderId={focusOrderId} onFocusHandled={() => setFocusOrderId(null)} />}
       </div>
     </div>
   );
@@ -1030,25 +939,6 @@ function ClientsTab() {
 
                   {c.notes && <p className="text-xs text-gray-400 mt-1 truncate">{c.notes}</p>}
 
-                  {/* Last contacted */}
-                  <div className="flex items-center gap-2 mt-2">
-                    {c.last_contacted ? (
-                      <span className="text-xs text-gray-400">
-                        Last contact: {new Date(c.last_contacted).toLocaleDateString()}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-amber-500">Never contacted</span>
-                    )}
-                    <button
-                      onClick={async () => {
-                        await markClientContacted(c.id);
-                        setClients((prev) => prev.map((x) => x.id === c.id ? { ...x, last_contacted: new Date().toISOString() } : x));
-                      }}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      Mark contacted
-                    </button>
-                  </div>
                 </div>
 
                 {/* Right: actions */}
@@ -1896,8 +1786,141 @@ function AddProductModal({ onClose, onCreated, allProducts, platingSuggestions, 
   );
 }
 
+// ── QUICK MESSAGES (copy to clipboard + show preview) ─────────────────────────
+function QuickMessages({ selectedOrder, orderDetail, orderTotal }) {
+  const [expanded, setExpanded] = useState(null); // label of expanded msg
+  const [copied, setCopied] = useState(null);
+
+  const templates = [
+    { label: 'Confirmed', msg: () => `Hi ${selectedOrder.clients?.name}! Your order #${selectedOrder.id} has been confirmed and is being processed. We'll keep you updated!` },
+    { label: 'In Production', msg: () => `Hi ${selectedOrder.clients?.name}! Your order #${selectedOrder.id} is now in production. We'll notify you once it's ready.` },
+    { label: 'Ready to Ship', msg: () => `Hi ${selectedOrder.clients?.name}! Great news — your order #${selectedOrder.id} is ready and will be shipped soon!` },
+    { label: 'Shipped', msg: () => `Hi ${selectedOrder.clients?.name}! Your order #${selectedOrder.id} has been shipped${orderDetail.tracking_number ? `. Tracking: ${orderDetail.tracking_number}` : ''}. Let us know when it arrives!` },
+    { label: 'Payment', msg: () => { const bal = orderTotal(selectedOrder) - (orderDetail.amount_paid || 0); return `Hi ${selectedOrder.clients?.name}! Friendly reminder about the balance on order #${selectedOrder.id}${bal > 0 ? ` ($${Math.round(bal)} remaining)` : ''}. Please let us know if you have any questions.`; } },
+  ];
+
+  async function handleClick(t) {
+    const text = t.msg();
+    if (expanded === t.label) {
+      setExpanded(null);
+      return;
+    }
+    setExpanded(t.label);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(t.label);
+      setTimeout(() => setCopied(null), 2000);
+      await logMessage(selectedOrder.clients.id, selectedOrder.id, 'whatsapp', t.label, text, 'Admin');
+    } catch (_) {}
+  }
+
+  const phone = selectedOrder.clients.whatsapp.replace(/\D/g, '');
+
+  return (
+    <div>
+      <label className="block text-xs text-gray-500 mb-1.5">Quick Messages</label>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {templates.map((t) => (
+          <button key={t.label} onClick={() => handleClick(t)}
+            className={`rounded-lg border px-2 py-1 text-xs font-medium transition-colors ${
+              expanded === t.label
+                ? 'bg-green-100 border-green-300 text-green-700'
+                : 'border-gray-200 text-gray-600 hover:bg-green-50 hover:border-green-300 hover:text-green-700'
+            }`}>
+            {copied === t.label ? '✓ Copied' : t.label}
+          </button>
+        ))}
+      </div>
+      {expanded && (() => {
+        const t = templates.find((x) => x.label === expanded);
+        if (!t) return null;
+        const text = t.msg();
+        return (
+          <div className="rounded-lg bg-gray-50 border border-gray-200 p-2.5 space-y-2">
+            <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{text}</p>
+            <div className="flex gap-2">
+              <a href={`https://wa.me/${phone}?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer"
+                className="rounded-lg bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 transition-colors">
+                Open WhatsApp
+              </a>
+              <button onClick={async () => {
+                try { await navigator.clipboard.writeText(text); setCopied(expanded); setTimeout(() => setCopied(null), 2000); } catch (_) {}
+              }}
+                className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors">
+                {copied === expanded ? '✓ Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+// ── ORDER CARD (shared between active + completed lists) ──────────────────────
+function OrderCard({ order, pendingRequests, isOverdue, orderTotal, openOrderDetail }) {
+  const hasPending = pendingRequests.some((r) => r.order_id === order.id);
+  const overdue = isOverdue(order);
+  const total = orderTotal(order);
+  const orderDate = new Date(order.created_at);
+  const isToday = orderDate.toDateString() === new Date().toDateString();
+  const dateStr = isToday
+    ? `Today · ${orderDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    : orderDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const paid = order.amount_paid || 0;
+  const balance = total - paid;
+
+  return (
+    <div onClick={() => openOrderDetail(order)}
+      className={`bg-white rounded-xl border px-5 py-4 cursor-pointer hover:shadow-sm transition-all flex items-center gap-4 ${overdue ? 'border-red-200 bg-red-50/30' : 'border-gray-200 hover:border-gray-300'}`}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-base font-bold text-gray-900">{order.clients?.name || 'Unknown'}</span>
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-600'}`}>
+            {order.status}
+          </span>
+          {order.payment_status && order.payment_status !== 'paid' && total > 0 && (
+            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-red-50 text-red-600">
+              {order.payment_status === 'partial' ? `$${balance.toLocaleString()} due` : 'unpaid'}
+            </span>
+          )}
+          {order.payment_status === 'paid' && (
+            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700">paid</span>
+          )}
+          {overdue && (
+            <span className="rounded-full px-2 py-0.5 text-xs font-bold bg-red-100 text-red-600">overdue</span>
+          )}
+          {hasPending && (
+            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700">change request</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 mt-1 flex-wrap">
+          <span className="text-sm text-gray-500 font-medium">{dateStr}</span>
+          <span className="text-xs text-gray-300">·</span>
+          <span className="text-xs text-gray-400">{(order.order_items || []).length} item{(order.order_items || []).length !== 1 ? 's' : ''}</span>
+          {order.due_date && (
+            <>
+              <span className="text-xs text-gray-300">·</span>
+              <span className={`text-xs font-medium ${overdue ? 'text-red-500' : 'text-orange-500'}`}>
+                Due {new Date(order.due_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
+            </>
+          )}
+          {total > 0 && (
+            <>
+              <span className="text-xs text-gray-300">·</span>
+              <span className="text-xs font-semibold text-gray-700">${total.toLocaleString()}</span>
+            </>
+          )}
+        </div>
+      </div>
+      <ChevronRightIcon className="h-4 w-4 text-gray-300 flex-shrink-0" />
+    </div>
+  );
+}
+
 // ── ORDERS TAB ────────────────────────────────────────────────────────────────
-function OrdersTab() {
+function OrdersTab({ focusOrderId, onFocusHandled }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -1910,6 +1933,8 @@ function OrdersTab() {
   const [saveIndicator, setSaveIndicator] = useState(''); // '' | 'saving' | 'saved'
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQ, setSearchQ] = useState('');
+  const [addingItem, setAddingItem] = useState(false);
+  const [itemSearch, setItemSearch] = useState('');
   const debounceRef = useRef(null);
   const selectedOrderRef = useRef(null);
 
@@ -1936,11 +1961,30 @@ function OrdersTab() {
     loadPending();
   }, []);
 
+  // Auto-open a specific order when navigating from dashboard
+  useEffect(() => {
+    if (focusOrderId && orders.length > 0) {
+      const target = orders.find((o) => o.id === focusOrderId);
+      if (target) {
+        openOrderDetail(target);
+      }
+      if (onFocusHandled) onFocusHandled();
+    }
+  }, [focusOrderId, orders]);
+
   async function openOrderDetail(order) {
     setSelectedOrder(order);
     setDetailTab('items');
     setAddingItem(false);
     setItemSearch('');
+    // Auto-calculate total from items
+    const computedTotal = (order.order_items || []).reduce((sum, item) => {
+      return sum + (item.products?.price || 0) * (item.quantity || 1);
+    }, 0);
+    // Sync total_amount in DB if it's stale
+    if (computedTotal > 0 && computedTotal !== (order.total_amount || 0)) {
+      updateOrderAdmin(order.id, { total_amount: computedTotal }).catch(() => {});
+    }
     setOrderDetail({
       status: order.status,
       due_date: order.due_date || '',
@@ -1950,7 +1994,7 @@ function OrdersTab() {
       production_status: order.production_status || 'pending',
       payment_status: order.payment_status || 'unpaid',
       amount_paid: order.amount_paid || 0,
-      total_amount: order.total_amount || 0,
+      total_amount: computedTotal,
       tracking_number: order.tracking_number || '',
       carrier: order.carrier || '',
       shipped_date: order.shipped_date || '',
@@ -2026,6 +2070,7 @@ function OrdersTab() {
       });
       await addOrderHistory(selectedOrder.id, 'Admin', `Edited item ${item.products?.name}: qty=${item.quantity}, plating=${item.plating}, stone=${item.stone_color}`);
       setOrderDetail((d) => ({ ...d, items: d.items.map((i) => i.id === item.id ? { ...item, _editing: false } : i) }));
+      setSelectedOrder((prev) => prev ? { ...prev, order_items: (prev.order_items || []).map((i) => i.id === item.id ? { ...i, quantity: item.quantity, plating: item.plating, stone_color: item.stone_color } : i) } : prev);
       const hist = await fetchOrderHistory(selectedOrder.id);
       setHistory(hist || []);
     } catch (e) { alert('Save failed: ' + e.message); }
@@ -2039,14 +2084,14 @@ function OrdersTab() {
       await deleteOrderItem(itemId);
       await addOrderHistory(selectedOrder.id, 'Admin', `Removed item ${productName}`);
       setOrderDetail((d) => ({ ...d, items: d.items.filter((i) => i.id !== itemId) }));
+      setSelectedOrder((prev) => prev ? { ...prev, order_items: (prev.order_items || []).filter((i) => i.id !== itemId) } : prev);
+      setOrders((prev) => prev.map((o) => o.id === selectedOrder.id ? { ...o, order_items: (o.order_items || []).filter((i) => i.id !== itemId) } : o));
       const hist = await fetchOrderHistory(selectedOrder.id);
       setHistory(hist || []);
     } catch (e) { alert('Remove failed: ' + e.message); }
     finally { setSavingOrder(false); }
   }
 
-  const [addingItem, setAddingItem] = useState(false);
-  const [itemSearch, setItemSearch] = useState('');
   const { allProducts: allProds, products: ctxProds } = useProducts();
   const allProductsList = allProds || ctxProds || [];
 
@@ -2066,6 +2111,7 @@ function OrdersTab() {
       const fresh = await fetchOrdersWithItemsFull();
       const updated = (fresh || []).find((o) => o.id === selectedOrder.id);
       if (updated) {
+        setSelectedOrder(updated);
         setOrderDetail((d) => ({
           ...d,
           items: (updated.order_items || []).map((i) => ({ ...i, _editing: false })),
@@ -2102,8 +2148,12 @@ function OrdersTab() {
     finally { setSavingOrder(false); }
   }
 
+  // Compute from orderDetail.items (live) if available, otherwise from order.order_items
   function orderTotal(order) {
-    return (order.order_items || []).reduce((sum, item) => {
+    const items = (orderDetail && selectedOrder && order.id === selectedOrder.id)
+      ? orderDetail.items
+      : (order.order_items || []);
+    return items.reduce((sum, item) => {
       const price = item.products?.price || 0;
       return sum + price * (item.quantity || 1);
     }, 0);
@@ -2115,14 +2165,23 @@ function OrdersTab() {
     return new Date(order.due_date + 'T00:00:00') < new Date();
   }
 
+  // An order is "active" if it still needs action: not delivered, not cancelled, or unpaid
+  function isActiveOrder(o) {
+    if (o.status === 'cancelled') return false;
+    if (o.status === 'delivered' && o.payment_status === 'paid') return false;
+    return true;
+  }
+
   const filteredOrders = orders
     .filter((o) => {
       const matchStatus = statusFilter === 'all' || o.status === statusFilter;
       const matchSearch = !searchQ || (o.clients?.name || '').toLowerCase().includes(searchQ.toLowerCase());
       return matchStatus && matchSearch;
-    })
+    });
+
+  const activeOrders = filteredOrders
+    .filter(isActiveOrder)
     .sort((a, b) => {
-      // Overdue first, then by due_date asc (soonest first), then by created_at desc
       const aOverdue = isOverdue(a), bOverdue = isOverdue(b);
       if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
       if (a.due_date && b.due_date) return new Date(a.due_date) - new Date(b.due_date);
@@ -2130,6 +2189,10 @@ function OrdersTab() {
       if (b.due_date) return 1;
       return new Date(b.created_at) - new Date(a.created_at);
     });
+
+  const completedOrders = filteredOrders
+    .filter((o) => !isActiveOrder(o))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
   if (loading) return <div className="flex justify-center py-16"><div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-gray-800" /></div>;
 
@@ -2171,553 +2234,448 @@ function OrdersTab() {
         <div className="rounded-xl border-2 border-dashed border-gray-200 py-16 text-center text-gray-400">No orders found.</div>
       )}
 
-      {/* Order list */}
-      <div className="space-y-2">
-        {filteredOrders.map((order) => {
-          const hasPending = pendingRequests.some((r) => r.order_id === order.id);
-          const overdue = isOverdue(order);
-          const total = orderTotal(order);
-          const orderDate = new Date(order.created_at);
-          const isToday = orderDate.toDateString() === new Date().toDateString();
-          const dateStr = isToday
-            ? `Today · ${orderDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-            : orderDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          return (
-            <div key={order.id}
-              onClick={() => openOrderDetail(order)}
-              className={`bg-white rounded-xl border px-5 py-4 cursor-pointer hover:shadow-sm transition-all flex items-center gap-4 ${overdue ? 'border-red-200 bg-red-50/30' : 'border-gray-200 hover:border-gray-300'}`}>
-              <div className="flex-1 min-w-0">
-                {/* Top row: name + badges */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-base font-bold text-gray-900">{order.clients?.name || 'Unknown'}</span>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-600'}`}>
-                    {order.status}
-                  </span>
-                  {overdue && (
-                    <span className="rounded-full px-2 py-0.5 text-xs font-bold bg-red-100 text-red-600">⚠ Overdue</span>
-                  )}
-                  {hasPending && (
-                    <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700">● change request</span>
-                  )}
-                  {order.payment_received && (
-                    <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700">paid</span>
-                  )}
-                  {order.contacted && (
-                    <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700">contacted</span>
-                  )}
-                </div>
-                {/* Bottom row: date · items · due · total */}
-                <div className="flex items-center gap-3 mt-1 flex-wrap">
-                  <span className="text-sm text-gray-500 font-medium">{dateStr}</span>
-                  <span className="text-xs text-gray-300">·</span>
-                  <span className="text-xs text-gray-400">{(order.order_items || []).length} item{(order.order_items || []).length !== 1 ? 's' : ''}</span>
-                  {order.due_date && (
-                    <>
-                      <span className="text-xs text-gray-300">·</span>
-                      <span className={`text-xs font-medium ${overdue ? 'text-red-500' : 'text-orange-500'}`}>
-                        Due {new Date(order.due_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
-                    </>
-                  )}
-                  {total > 0 && (
-                    <>
-                      <span className="text-xs text-gray-300">·</span>
-                      <span className="text-xs font-semibold text-gray-700">${total.toLocaleString()}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-              <ChevronRightIcon className="h-4 w-4 text-gray-300 flex-shrink-0" />
-            </div>
-          );
-        })}
-      </div>
+      {/* Active Orders */}
+      {activeOrders.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 mb-3">
+            <h3 className="text-sm font-semibold text-gray-900">Active Orders</h3>
+            <span className="rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-xs font-bold">{activeOrders.length}</span>
+          </div>
+          <div className="space-y-2 mb-8">
+            {activeOrders.map((order) => <OrderCard key={order.id} order={order} pendingRequests={pendingRequests} isOverdue={isOverdue} orderTotal={orderTotal} openOrderDetail={openOrderDetail} />)}
+          </div>
+        </>
+      )}
 
-      {/* Order Detail Panel (slide-over / modal) */}
+      {/* Completed / Cancelled Orders */}
+      {completedOrders.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 mb-3 mt-2">
+            <h3 className="text-sm font-semibold text-gray-400">Completed</h3>
+            <span className="rounded-full bg-gray-100 text-gray-500 px-2 py-0.5 text-xs font-medium">{completedOrders.length}</span>
+          </div>
+          <div className="space-y-2 opacity-70">
+            {completedOrders.map((order) => <OrderCard key={order.id} order={order} pendingRequests={pendingRequests} isOverdue={isOverdue} orderTotal={orderTotal} openOrderDetail={openOrderDetail} />)}
+          </div>
+        </>
+      )}
+
+      {/* Order Detail Panel — full-width overlay */}
       {selectedOrder && orderDetail && (
-        <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/30" onClick={closeDetail}>
-          <div className="relative h-full w-full max-w-2xl bg-white shadow-2xl overflow-y-auto flex flex-col"
+        <div className="fixed inset-0 z-50 flex bg-black/30" onClick={closeDetail}>
+          <div className="relative flex h-full w-full max-w-5xl ml-auto bg-white shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}>
 
-            {/* Header */}
-            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <h2 className="font-semibold text-gray-900 text-lg truncate">{selectedOrder.clients?.name}</h2>
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  <p className="text-xs text-gray-400">Order #{selectedOrder.id} · {new Date(selectedOrder.created_at).toLocaleDateString()}</p>
-                  {orderTotal(selectedOrder) > 0 && (
-                    <span className="text-xs font-semibold text-gray-700 bg-gray-100 rounded-full px-2 py-0.5">
-                      ${orderTotal(selectedOrder).toLocaleString()}
+            {/* ═══ LEFT COLUMN: Items + sub-tabs (60%) ═══ */}
+            <div className="flex-1 flex flex-col min-w-0 border-r border-gray-100">
+
+              {/* Header */}
+              <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-5 py-3 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-gray-900 text-lg truncate">{selectedOrder.clients?.name}</h2>
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[orderDetail.status] || 'bg-gray-100 text-gray-600'}`}>
+                      {orderDetail.status}
                     </span>
-                  )}
-                  {isOverdue(selectedOrder) && (
-                    <span className="text-xs font-bold text-red-600 bg-red-50 rounded-full px-2 py-0.5">⚠ Overdue</span>
-                  )}
+                    {isOverdue(selectedOrder) && (
+                      <span className="text-xs font-bold text-red-600 bg-red-50 rounded-full px-2 py-0.5">Overdue</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">Order #{selectedOrder.id} · {new Date(selectedOrder.created_at).toLocaleDateString()}</p>
                 </div>
+                {saveIndicator === 'saving' && <span className="text-xs text-gray-400">Saving…</span>}
+                {saveIndicator === 'saved' && <span className="text-xs text-green-500">✓ Saved</span>}
+                <button onClick={closeDetail} className="text-gray-400 hover:text-gray-700 text-xl leading-none ml-1">✕</button>
               </div>
-              {saveIndicator === 'saving' && <span className="text-xs text-gray-400 flex-shrink-0">Saving…</span>}
-              {saveIndicator === 'saved' && <span className="text-xs text-green-500 flex-shrink-0">✓ Saved</span>}
-              <a href={`/invoice/${selectedOrder.id}`} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 flex-shrink-0">
-                <BanknotesIcon className="h-4 w-4" />
-                Invoice
-              </a>
-              <a href={`/factory-print/${selectedOrder.id}`} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 flex-shrink-0">
-                <ClipboardDocumentListIcon className="h-4 w-4" />
-                Factory
-              </a>
-              <button onClick={closeDetail} className="text-gray-400 hover:text-gray-700 text-2xl leading-none flex-shrink-0">×</button>
+
+              {/* Sub-tabs */}
+              <div className="flex gap-1 border-b border-gray-100 px-5 bg-gray-50/50">
+                {[
+                  ['items', `Items (${orderDetail.items.length})`],
+                  ['requests', `Requests${changeRequests.filter((r) => r.status === 'pending').length ? ` (${changeRequests.filter((r) => r.status === 'pending').length})` : ''}`],
+                  ['history', 'History'],
+                ].map(([key, label]) => (
+                  <button key={key} onClick={() => setDetailTab(key)}
+                    className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${detailTab === key ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tab content — scrollable */}
+              <div className="flex-1 overflow-y-auto">
+
+                {/* Items tab */}
+                {detailTab === 'items' && (
+                  <div className="p-5 space-y-3">
+                    {selectedOrder.notes && (
+                      <p className="text-sm text-gray-500 italic bg-gray-50 rounded-lg px-3 py-2">"{selectedOrder.notes}"</p>
+                    )}
+                    {orderDetail.items.map((item, idx) => (
+                      <div key={item.id} className="rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="flex items-center gap-3 px-4 py-3">
+                          <div className="h-14 w-14 rounded-lg overflow-hidden bg-gray-50 flex-shrink-0">
+                            {item.products?.image_url
+                              ? <img src={item.products.image_url} alt={item.products?.name} className="h-full w-full object-cover" />
+                              : <div className="h-full flex items-center justify-center text-xl opacity-20">💍</div>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900">{item.products?.name}</p>
+                            {!item._editing && (
+                              <p className="text-xs text-gray-400">
+                                Qty: {item.quantity}
+                                {item.plating ? ` · ${item.plating}` : ''}
+                                {item.stone_color ? ` · ${item.stone_color}` : ''}
+                              </p>
+                            )}
+                          </div>
+                          {!item._editing && item.products?.price > 0 && (
+                            <span className="text-sm font-semibold text-gray-700 flex-shrink-0">
+                              ${((item.products.price || 0) * (item.quantity || 1)).toLocaleString()}
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button onClick={() => setOrderDetail((d) => ({ ...d, items: d.items.map((i, ii) => ii === idx ? { ...i, _editing: !i._editing } : i) }))}
+                              className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                              <PencilSquareIcon className="h-4 w-4" />
+                            </button>
+                            <button onClick={() => removeItem(item.id, item.products?.name)}
+                              className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600">
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                        {item._editing && (
+                          <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Qty</label>
+                              <input type="number" min="1" value={item.quantity}
+                                onChange={(e) => setOrderDetail((d) => ({ ...d, items: d.items.map((i, ii) => ii === idx ? { ...i, quantity: parseInt(e.target.value) || 1 } : i) }))}
+                                className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none" />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Plating</label>
+                              <input type="text" value={item.plating || ''}
+                                onChange={(e) => setOrderDetail((d) => ({ ...d, items: d.items.map((i, ii) => ii === idx ? { ...i, plating: e.target.value } : i) }))}
+                                className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none" />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Stone</label>
+                              <input type="text" value={item.stone_color || ''}
+                                onChange={(e) => setOrderDetail((d) => ({ ...d, items: d.items.map((i, ii) => ii === idx ? { ...i, stone_color: e.target.value } : i) }))}
+                                className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none" />
+                            </div>
+                            <div className="col-span-3 flex justify-end gap-2">
+                              <button onClick={() => setOrderDetail((d) => ({ ...d, items: d.items.map((i, ii) => ii === idx ? { ...i, _editing: false } : i) }))}
+                                className="rounded-lg px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200">Cancel</button>
+                              <button onClick={() => saveItemEdit(item)} disabled={savingOrder}
+                                className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50">
+                                {savingOrder ? 'Saving…' : 'Save'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {orderDetail.items.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-8">No items in this order.</p>
+                    )}
+
+                    {/* Add item */}
+                    {!addingItem ? (
+                      <button onClick={() => setAddingItem(true)}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 py-3 text-sm text-gray-500 hover:border-gray-300 hover:bg-gray-50 transition-colors">
+                        <PlusIcon className="h-4 w-4" /> Add Item
+                      </button>
+                    ) : (
+                      <div className="rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                          <MagnifyingGlassIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                          <input autoFocus value={itemSearch} onChange={(e) => setItemSearch(e.target.value)}
+                            placeholder="Search product to add…" className="flex-1 bg-transparent text-sm focus:outline-none" />
+                          <button onClick={() => { setAddingItem(false); setItemSearch(''); }}
+                            className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
+                          {allProductsList
+                            .filter((p) => itemSearch.length > 0 && p.name.toLowerCase().includes(itemSearch.toLowerCase()))
+                            .slice(0, 20)
+                            .map((p) => (
+                              <button key={p.id} onClick={() => handleAddItem(p)} disabled={savingOrder}
+                                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left disabled:opacity-50">
+                                <div className="h-10 w-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                                  {p.image_url
+                                    ? <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
+                                    : <div className="h-full flex items-center justify-center text-sm opacity-20">💍</div>}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
+                                  <p className="text-xs text-gray-400">{p.category}</p>
+                                </div>
+                                <PlusIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                              </button>
+                            ))}
+                          {itemSearch.length > 0 && allProductsList.filter((p) => p.name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
+                            <p className="text-sm text-gray-400 text-center py-4">No products found</p>
+                          )}
+                          {itemSearch.length === 0 && (
+                            <p className="text-xs text-gray-400 text-center py-4">Start typing to search</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Change Requests tab */}
+                {detailTab === 'requests' && (
+                  <div className="p-5 space-y-3">
+                    {changeRequests.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-8">No change requests.</p>
+                    )}
+                    {changeRequests.map((req) => (
+                      <div key={req.id} className="rounded-xl border border-gray-200 px-4 py-3">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium text-gray-900">{req.request_type}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                req.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                req.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                'bg-red-100 text-red-700'}`}>
+                                {req.status}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">{req.description}</p>
+                            <p className="text-xs text-gray-400 mt-1">{new Date(req.created_at).toLocaleString()}</p>
+                            {req.admin_note && <p className="text-xs text-gray-500 mt-1 italic">Note: {req.admin_note}</p>}
+                          </div>
+                          {req.status === 'pending' && (
+                            <div className="flex gap-2 flex-shrink-0">
+                              <button onClick={() => resolveRequest(req, 'approved')} disabled={savingOrder}
+                                className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50">Approve</button>
+                              <button onClick={() => resolveRequest(req, 'rejected')} disabled={savingOrder}
+                                className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50">Reject</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* History tab */}
+                {detailTab === 'history' && (
+                  <div className="p-5">
+                    {history.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-8">No changes recorded yet.</p>
+                    )}
+                    <div className="relative">
+                      {history.length > 0 && <div className="absolute left-3 top-2 bottom-2 w-px bg-gray-100" />}
+                      <div className="space-y-0">
+                        {history.map((h) => {
+                          const isToday = new Date(h.created_at).toDateString() === new Date().toDateString();
+                          const timeStr = isToday
+                            ? new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            : new Date(h.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                          const isClient = h.changed_by !== 'Admin';
+                          return (
+                            <div key={h.id} className="flex gap-4 pb-4 relative">
+                              <div className={`h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 z-10 border-2 border-white ${isClient ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                                <span className={`text-xs font-bold ${isClient ? 'text-blue-600' : 'text-gray-500'}`}>{isClient ? 'C' : 'A'}</span>
+                              </div>
+                              <div className="flex-1 min-w-0 pt-0.5">
+                                <p className="text-sm text-gray-800 leading-snug">{h.description}</p>
+                                <p className="text-xs text-gray-400 mt-0.5">{timeStr}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Meta fields */}
-            <div className="px-6 py-4 border-b border-gray-100 grid grid-cols-2 gap-4">
-              {/* Status */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
-                <select value={orderDetail.status}
-                  onChange={(e) => changeStatus(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none">
-                  {['pending','confirmed','shipped','delivered','cancelled'].map((s) => (
-                    <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                  ))}
-                </select>
+            {/* ═══ RIGHT COLUMN: Order management (40%) ═══ */}
+            <div className="w-80 lg:w-96 flex-shrink-0 flex flex-col overflow-y-auto bg-gray-50/50">
+
+              {/* Payment summary card */}
+              <div className="p-4 border-b border-gray-100 bg-white">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Payment</span>
+                  <select value={orderDetail.payment_status}
+                    onChange={(e) => { const v = e.target.value; setOrderDetail((d) => d ? { ...d, payment_status: v } : d); saveField('payment_status', v); }}
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium border-0 focus:outline-none cursor-pointer ${
+                      orderDetail.payment_status === 'paid' ? 'bg-green-100 text-green-700' :
+                      orderDetail.payment_status === 'partial' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'}`}>
+                    <option value="unpaid">Unpaid</option>
+                    <option value="partial">Partial</option>
+                    <option value="paid">Paid</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Total</span>
+                    <span className="font-bold text-gray-900">${orderTotal(selectedOrder).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-500">Paid</span>
+                    <div className="relative w-28">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
+                      <input type="number" step="0.01" value={orderDetail.amount_paid}
+                        onChange={(e) => { const v = parseFloat(e.target.value) || 0; setOrderDetail((d) => d ? { ...d, amount_paid: v } : d); saveFieldDebounced('amount_paid', v); }}
+                        className="w-full rounded-lg border border-gray-200 pl-5 pr-2 py-1 text-sm text-right focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                    </div>
+                  </div>
+                  {(() => {
+                    const total = orderTotal(selectedOrder);
+                    const paid = orderDetail.amount_paid || 0;
+                    const balance = total - paid;
+                    if (total <= 0) return null;
+                    return (
+                      <div className={`flex justify-between text-sm pt-2 border-t border-gray-200 font-bold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        <span>{balance > 0 ? 'Balance' : 'Paid in Full'}</span>
+                        <span>${Math.abs(balance).toLocaleString()}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
 
-              {/* Due date */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
-                  <CalendarIcon className="h-3.5 w-3.5" /> Due Date
-                </label>
-                <input type="date" value={orderDetail.due_date}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setOrderDetail((d) => d ? { ...d, due_date: v } : d);
-                    saveFieldDebounced('due_date', v);
-                  }}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
+              {/* Status & Production */}
+              <div className="p-4 border-b border-gray-100 bg-white space-y-3">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Order</label>
+                    <select value={orderDetail.status} onChange={(e) => changeStatus(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none">
+                      {['pending','confirmed','shipped','delivered','cancelled'].map((s) => (
+                        <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Production</label>
+                    <select value={orderDetail.production_status}
+                      onChange={(e) => { const v = e.target.value; setOrderDetail((d) => d ? { ...d, production_status: v } : d); saveField('production_status', v); }}
+                      className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none">
+                      {[['pending','Pending'],['confirmed','Confirmed'],['in_production','In Production'],['ready','Ready'],['shipped','Shipped'],['delivered','Delivered']].map(([v,l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Due Date</label>
+                  <input type="date" value={orderDetail.due_date}
+                    onChange={(e) => { const v = e.target.value; setOrderDetail((d) => d ? { ...d, due_date: v } : d); saveFieldDebounced('due_date', v); }}
+                    className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none" />
+                </div>
               </div>
 
-              {/* Production Status */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Production Status</label>
-                <select value={orderDetail.production_status}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setOrderDetail((d) => d ? { ...d, production_status: v } : d);
-                    saveField('production_status', v);
-                  }}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none">
-                  <option value="pending">Pending</option>
-                  <option value="confirmed">Confirmed</option>
-                  <option value="in_production">In Production</option>
-                  <option value="ready">Ready to Ship</option>
-                  <option value="shipped">Shipped</option>
-                  <option value="delivered">Delivered</option>
-                </select>
+              {/* Shipping */}
+              <div className="p-4 border-b border-gray-100 bg-white space-y-3">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Shipping</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs text-gray-500 mb-1">Tracking #</label>
+                    <input type="text" value={orderDetail.tracking_number} placeholder="e.g., 1Z999AA…"
+                      onChange={(e) => { const v = e.target.value; setOrderDetail((d) => d ? { ...d, tracking_number: v } : d); saveFieldDebounced('tracking_number', v); }}
+                      className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Carrier</label>
+                    <input type="text" value={orderDetail.carrier} placeholder="DHL, FedEx…"
+                      onChange={(e) => { const v = e.target.value; setOrderDetail((d) => d ? { ...d, carrier: v } : d); saveFieldDebounced('carrier', v); }}
+                      className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Ship Date</label>
+                    <input type="date" value={orderDetail.shipped_date ? orderDetail.shipped_date.split('T')[0] : ''}
+                      onChange={(e) => { const v = e.target.value; setOrderDetail((d) => d ? { ...d, shipped_date: v } : d); saveFieldDebounced('shipped_date', v ? new Date(v).toISOString() : null); }}
+                      className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none" />
+                  </div>
+                </div>
               </div>
 
-              {/* Payment Status */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Payment Status</label>
-                <select value={orderDetail.payment_status}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setOrderDetail((d) => d ? { ...d, payment_status: v } : d);
-                    saveField('payment_status', v);
-                  }}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none">
-                  <option value="unpaid">Unpaid</option>
-                  <option value="partial">Partial</option>
-                  <option value="paid">Paid</option>
-                </select>
-              </div>
-
-              {/* Total Amount */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Total Amount</label>
-                <input type="number" step="0.01" value={orderDetail.total_amount}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value) || 0;
-                    setOrderDetail((d) => d ? { ...d, total_amount: v } : d);
-                    saveFieldDebounced('total_amount', v);
-                  }}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
-              </div>
-
-              {/* Amount Paid */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Amount Paid</label>
-                <input type="number" step="0.01" value={orderDetail.amount_paid}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value) || 0;
-                    setOrderDetail((d) => d ? { ...d, amount_paid: v } : d);
-                    saveFieldDebounced('amount_paid', v);
-                  }}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
-              </div>
-
-              {/* Shipping Info */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Tracking Number</label>
-                <input type="text" value={orderDetail.tracking_number}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setOrderDetail((d) => d ? { ...d, tracking_number: v } : d);
-                    saveFieldDebounced('tracking_number', v);
-                  }}
-                  placeholder="e.g., 1Z999AA10123456784"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Carrier</label>
-                <input type="text" value={orderDetail.carrier}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setOrderDetail((d) => d ? { ...d, carrier: v } : d);
-                    saveFieldDebounced('carrier', v);
-                  }}
-                  placeholder="e.g., DHL, FedEx, UPS"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Shipped Date</label>
-                <input type="date" value={orderDetail.shipped_date ? orderDetail.shipped_date.split('T')[0] : ''}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setOrderDetail((d) => d ? { ...d, shipped_date: v } : d);
-                    saveFieldDebounced('shipped_date', v ? new Date(v).toISOString() : null);
-                  }}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none" />
-              </div>
-
-              {/* Issue Tracking */}
-              <div className="col-span-2">
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="block text-xs font-medium text-gray-500">Issues / Returns</label>
+              {/* Issues */}
+              <div className="p-4 border-b border-gray-100 bg-white space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Issues</span>
                   <button onClick={() => {
                     const newVal = !orderDetail.has_issues;
                     setOrderDetail((d) => d ? { ...d, has_issues: newVal, issue_description: newVal ? d.issue_description : '' } : d);
                     saveField('has_issues', newVal);
                     if (!newVal) saveField('issue_description', '');
                   }}
-                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${orderDetail.has_issues ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                    {orderDetail.has_issues ? '⚠ Has Issues' : 'No Issues'}
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${orderDetail.has_issues ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    {orderDetail.has_issues ? 'Has Issues' : 'No Issues'}
                   </button>
-                  {orderDetail.has_issues && (
-                    <select value={orderDetail.resolution_status}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setOrderDetail((d) => d ? { ...d, resolution_status: v } : d);
-                        saveField('resolution_status', v);
-                      }}
-                      className="rounded-lg border border-gray-200 px-2 py-1 text-xs focus:outline-none">
-                      <option value="pending">Pending</option>
-                      <option value="resolved">Resolved</option>
-                    </select>
-                  )}
                 </div>
                 {orderDetail.has_issues && (
-                  <textarea value={orderDetail.issue_description}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setOrderDetail((d) => d ? { ...d, issue_description: v } : d);
-                      saveFieldDebounced('issue_description', v, 1000);
-                    }}
-                    rows={2}
-                    placeholder="Describe the issue (e.g., wrong size, damaged items, missing pieces)..."
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none resize-none" />
+                  <>
+                    <select value={orderDetail.resolution_status}
+                      onChange={(e) => { const v = e.target.value; setOrderDetail((d) => d ? { ...d, resolution_status: v } : d); saveField('resolution_status', v); }}
+                      className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none">
+                      <option value="pending">Pending Resolution</option>
+                      <option value="resolved">Resolved</option>
+                    </select>
+                    <textarea value={orderDetail.issue_description}
+                      onChange={(e) => { const v = e.target.value; setOrderDetail((d) => d ? { ...d, issue_description: v } : d); saveFieldDebounced('issue_description', v, 1000); }}
+                      rows={2} placeholder="Describe the issue…"
+                      className="w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:outline-none resize-none" />
+                  </>
                 )}
               </div>
 
-              {/* Toggles — instant save */}
-              <div className="flex items-center gap-3 col-span-2 flex-wrap">
-                <button onClick={() => toggleBoolean('contacted')}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${orderDetail.contacted ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                  <CheckCircleIcon className="h-4 w-4" />
-                  Contacted
-                </button>
-                <button onClick={() => toggleBoolean('payment_received')}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${orderDetail.payment_received ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                  <CheckCircleIcon className="h-4 w-4" />
-                  Payment Received
-                </button>
-                {selectedOrder.clients?.whatsapp && (
-                  <a href={`https://wa.me/${selectedOrder.clients.whatsapp.replace(/\D/g,'')}`}
-                    target="_blank" rel="noreferrer"
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
-                    📱 WhatsApp
-                  </a>
-                )}
-              </div>
-
-              {/* Quick WhatsApp Messages */}
-              {selectedOrder.clients?.whatsapp && (
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-500 mb-2">Quick Messages</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { label: 'Order Confirmed', msg: () => `Hi ${selectedOrder.clients?.name}! Your order #${selectedOrder.id} has been confirmed and is being processed. We'll keep you updated!` },
-                      { label: 'In Production', msg: () => `Hi ${selectedOrder.clients?.name}! Your order #${selectedOrder.id} is now in production. We'll notify you once it's ready.` },
-                      { label: 'Ready to Ship', msg: () => `Hi ${selectedOrder.clients?.name}! Great news — your order #${selectedOrder.id} is ready and will be shipped soon!` },
-                      { label: 'Shipped', msg: () => `Hi ${selectedOrder.clients?.name}! Your order #${selectedOrder.id} has been shipped${orderDetail.tracking_number ? `. Tracking: ${orderDetail.tracking_number}` : ''}. Let us know when it arrives!` },
-                      { label: 'Payment Reminder', msg: () => `Hi ${selectedOrder.clients?.name}! Friendly reminder about the balance on order #${selectedOrder.id}${orderDetail.total_amount ? ` ($${Math.round(orderDetail.total_amount - (orderDetail.amount_paid || 0))} remaining)` : ''}. Please let us know if you have any questions.` },
-                    ].map((t) => {
-                      const phone = selectedOrder.clients.whatsapp.replace(/\D/g, '');
-                      return (
-                        <a key={t.label}
-                          href={`https://wa.me/${phone}?text=${encodeURIComponent(t.msg())}`}
-                          target="_blank" rel="noreferrer"
-                          onClick={async () => {
-                            try {
-                              await logMessage(selectedOrder.clients.id, selectedOrder.id, 'whatsapp', t.label, t.msg(), 'Admin');
-                            } catch (_) {}
-                          }}
-                          className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-green-50 hover:border-green-300 hover:text-green-700 transition-colors">
-                          {t.label}
-                        </a>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Admin notes — debounced save */}
-              <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Admin Notes</label>
-                <textarea value={orderDetail.admin_notes}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setOrderDetail((d) => d ? { ...d, admin_notes: v } : d);
-                    saveFieldDebounced('admin_notes', v, 1000);
-                  }}
-                  rows={2} placeholder="Internal notes, follow-ups…"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none resize-none" />
-              </div>
-            </div>
-
-            {/* Sub-tabs */}
-            <div className="flex gap-1 border-b border-gray-100 px-6">
-              {[
-                ['items', 'Items'],
-                ['requests', `Requests${changeRequests.filter((r) => r.status === 'pending').length ? ` (${changeRequests.filter((r) => r.status === 'pending').length})` : ''}`],
-                ['history', 'History'],
-              ].map(([key, label]) => (
-                <button key={key} onClick={() => setDetailTab(key)}
-                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${detailTab === key ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* Items tab */}
-            {detailTab === 'items' && (
-              <div className="px-6 py-4 space-y-3 flex-1">
-                {selectedOrder.notes && (
-                  <p className="text-sm text-gray-500 italic bg-gray-50 rounded-lg px-3 py-2">"{selectedOrder.notes}"</p>
-                )}
-                {orderDetail.items.map((item, idx) => (
-                  <div key={item.id} className="rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="flex items-center gap-3 px-4 py-3">
-                      <div className="h-14 w-14 rounded-lg overflow-hidden bg-gray-50 flex-shrink-0">
-                        {item.products?.image_url
-                          ? <img src={item.products.image_url} alt={item.products?.name} className="h-full w-full object-cover" />
-                          : <div className="h-full flex items-center justify-center text-xl opacity-20">💍</div>}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">{item.products?.name}</p>
-                        {!item._editing && (
-                          <p className="text-xs text-gray-400">
-                            Qty: {item.quantity}
-                            {item.plating ? ` · ${item.plating}` : ''}
-                            {item.stone_color ? ` · ${item.stone_color}` : ''}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <button onClick={() => setOrderDetail((d) => ({ ...d, items: d.items.map((i, ii) => ii === idx ? { ...i, _editing: !i._editing } : i) }))}
-                          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
-                          <PencilSquareIcon className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => removeItem(item.id, item.products?.name)}
-                          className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600">
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                    {item._editing && (
-                      <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 grid grid-cols-3 gap-2">
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Qty</label>
-                          <input type="number" min="1" value={item.quantity}
-                            onChange={(e) => setOrderDetail((d) => ({ ...d, items: d.items.map((i, ii) => ii === idx ? { ...i, quantity: parseInt(e.target.value) || 1 } : i) }))}
-                            className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Plating</label>
-                          <input type="text" value={item.plating || ''}
-                            onChange={(e) => setOrderDetail((d) => ({ ...d, items: d.items.map((i, ii) => ii === idx ? { ...i, plating: e.target.value } : i) }))}
-                            className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Stone</label>
-                          <input type="text" value={item.stone_color || ''}
-                            onChange={(e) => setOrderDetail((d) => ({ ...d, items: d.items.map((i, ii) => ii === idx ? { ...i, stone_color: e.target.value } : i) }))}
-                            className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:outline-none" />
-                        </div>
-                        <div className="col-span-3 flex justify-end gap-2">
-                          <button onClick={() => setOrderDetail((d) => ({ ...d, items: d.items.map((i, ii) => ii === idx ? { ...i, _editing: false } : i) }))}
-                            className="rounded-lg px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200">Cancel</button>
-                          <button onClick={() => saveItemEdit(item)} disabled={savingOrder}
-                            className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50">
-                            {savingOrder ? 'Saving…' : 'Save Item'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {orderDetail.items.length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-4">No items in this order.</p>
-                )}
-
-                {/* Order total */}
-                {orderTotal(selectedOrder) > 0 && (
-                  <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-                    <span className="text-sm font-medium text-gray-500">Order Total</span>
-                    <span className="text-base font-bold text-gray-900">${orderTotal(selectedOrder).toLocaleString()}</span>
-                  </div>
-                )}
-
-                {/* Add item */}
-                {!addingItem ? (
-                  <button onClick={() => setAddingItem(true)}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 py-3 text-sm text-gray-500 hover:border-gray-300 hover:bg-gray-50 transition-colors">
-                    <PlusIcon className="h-4 w-4" /> Add Item to Order
+              {/* Communication */}
+              <div className="p-4 border-b border-gray-100 bg-white space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Communication</span>
+                  <button onClick={() => toggleBoolean('contacted')}
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${orderDetail.contacted ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    {orderDetail.contacted ? '✓ Contacted' : 'Not Contacted'}
                   </button>
-                ) : (
-                  <div className="rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
-                      <MagnifyingGlassIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                      <input
-                        autoFocus
-                        value={itemSearch}
-                        onChange={(e) => setItemSearch(e.target.value)}
-                        placeholder="Search product to add…"
-                        className="flex-1 bg-transparent text-sm focus:outline-none"
-                      />
-                      <button onClick={() => { setAddingItem(false); setItemSearch(''); }}
-                        className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
-                      {allProductsList
-                        .filter((p) => itemSearch.length > 0 && p.name.toLowerCase().includes(itemSearch.toLowerCase()))
-                        .slice(0, 20)
-                        .map((p) => (
-                          <button key={p.id} onClick={() => handleAddItem(p)} disabled={savingOrder}
-                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left disabled:opacity-50">
-                            <div className="h-10 w-10 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                              {p.image_url
-                                ? <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
-                                : <div className="h-full flex items-center justify-center text-sm opacity-20">💍</div>}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
-                              <p className="text-xs text-gray-400">{p.category}</p>
-                            </div>
-                            <PlusIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                          </button>
-                        ))}
-                      {itemSearch.length > 0 && allProductsList.filter((p) => p.name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
-                        <p className="text-sm text-gray-400 text-center py-4">No products found</p>
-                      )}
-                      {itemSearch.length === 0 && (
-                        <p className="text-xs text-gray-400 text-center py-4">Start typing to search products</p>
-                      )}
-                    </div>
-                  </div>
+                </div>
+                {selectedOrder.clients?.whatsapp && (
+                  <>
+                    <a href={`https://wa.me/${selectedOrder.clients.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noreferrer"
+                      className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors">
+                      📱 Open WhatsApp Chat
+                    </a>
+                    <QuickMessages selectedOrder={selectedOrder} orderDetail={orderDetail} orderTotal={orderTotal} />
+                  </>
                 )}
               </div>
-            )}
 
-            {/* Change Requests tab */}
-            {detailTab === 'requests' && (
-              <div className="px-6 py-4 space-y-3 flex-1">
-                {changeRequests.length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-8">No change requests for this order.</p>
-                )}
-                {changeRequests.map((req) => (
-                  <div key={req.id} className="rounded-xl border border-gray-200 px-4 py-3">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-gray-900">{req.request_type}</span>
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                            req.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                            req.status === 'approved' ? 'bg-green-100 text-green-700' :
-                            'bg-red-100 text-red-700'}`}>
-                            {req.status}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1">{req.description}</p>
-                        <p className="text-xs text-gray-400 mt-1">{new Date(req.created_at).toLocaleString()}</p>
-                        {req.admin_note && <p className="text-xs text-gray-500 mt-1 italic">Note: {req.admin_note}</p>}
-                      </div>
-                      {req.status === 'pending' && (
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button onClick={() => resolveRequest(req, 'approved')} disabled={savingOrder}
-                            className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50">
-                            Approve
-                          </button>
-                          <button onClick={() => resolveRequest(req, 'rejected')} disabled={savingOrder}
-                            className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50">
-                            Reject
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* History tab */}
-            {detailTab === 'history' && (
-              <div className="px-6 py-4 flex-1">
-                {history.length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-8">No changes recorded yet.</p>
-                )}
-                <div className="relative">
-                  {/* Vertical line */}
-                  {history.length > 0 && <div className="absolute left-3 top-2 bottom-2 w-px bg-gray-100" />}
-                  <div className="space-y-0">
-                    {history.map((h, i) => {
-                      const isToday = new Date(h.created_at).toDateString() === new Date().toDateString();
-                      const timeStr = isToday
-                        ? new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                        : new Date(h.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-                      // Color dot by actor
-                      const isClient = h.changed_by !== 'Admin';
-                      return (
-                        <div key={h.id} className="flex gap-4 pb-4 relative">
-                          <div className={`h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 z-10 border-2 border-white ${isClient ? 'bg-blue-100' : 'bg-gray-100'}`}>
-                            <span className={`text-xs font-bold ${isClient ? 'text-blue-600' : 'text-gray-500'}`}>
-                              {isClient ? 'C' : 'A'}
-                            </span>
-                          </div>
-                          <div className="flex-1 min-w-0 pt-0.5">
-                            <p className="text-sm text-gray-800 leading-snug">{h.description}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">{timeStr}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+              {/* Print / Export */}
+              <div className="p-4 border-b border-gray-100 bg-white space-y-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Print / Export</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <a href={`/invoice/${selectedOrder.id}`} target="_blank" rel="noreferrer"
+                    className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                    <BanknotesIcon className="h-4 w-4" /> Invoice
+                  </a>
+                  <a href={`/factory-print/${selectedOrder.id}`} target="_blank" rel="noreferrer"
+                    className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                    <ClipboardDocumentListIcon className="h-4 w-4" /> Factory Sheet
+                  </a>
                 </div>
               </div>
-            )}
+
+              {/* Admin notes */}
+              <div className="p-4 bg-white flex-1">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Notes</label>
+                <textarea value={orderDetail.admin_notes}
+                  onChange={(e) => { const v = e.target.value; setOrderDetail((d) => d ? { ...d, admin_notes: v } : d); saveFieldDebounced('admin_notes', v, 1000); }}
+                  rows={3} placeholder="Internal notes…"
+                  className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm focus:outline-none resize-none" />
+              </div>
+            </div>
           </div>
         </div>
       )}
