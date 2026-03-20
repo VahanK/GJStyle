@@ -1165,10 +1165,15 @@ function ProductsTab() {
       const matchMissing = !missingOnly || isMissing(p);
       return matchCat && matchSearch && matchMissing;
     }).sort((a, b) => {
-      // Missing info first
-      const aMissing = isMissing(a) ? 0 : 1;
-      const bMissing = isMissing(b) ? 0 : 1;
-      return aMissing - bMissing;
+      // More missing data = higher priority (shown first)
+      const score = (p) => {
+        let s = 0;
+        if (needsStones(p) && !(p.stones?.length)) s += 2;
+        if (!p.price) s += 1;
+        if (!(p.plating?.length)) s += 1;
+        return s;
+      };
+      return score(b) - score(a);
     });
   })();
 
