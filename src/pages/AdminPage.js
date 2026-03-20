@@ -344,13 +344,18 @@ function AnalyticsTab() {
 // ── DASHBOARD TAB ────────────────────────────────────────────────────────────
 function DashboardTab({ onGoToOrder }) {
   const [orders, setOrders] = useState([]);
+  const [changeRequests, setChangeRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const ordersData = await fetchOrdersWithItemsFull();
+      const [ordersData, crData] = await Promise.all([
+        fetchOrdersWithItemsFull(),
+        fetchAllPendingChangeRequests(),
+      ]);
       setOrders(ordersData);
+      setChangeRequests(crData);
     } catch (e) {
       console.error('Dashboard load error:', e);
     } finally {
@@ -364,124 +369,167 @@ function DashboardTab({ onGoToOrder }) {
     return <div className="text-center py-12 text-gray-400">Loading dashboard...</div>;
   }
 
-  // Calculate action items
   const today = new Date();
+  const notCancelled = orders.filter((o) => o.status !== 'cancelled');
 
-  const activeOrdersList = orders.filter((o) => {
-    if (o.status === 'cancelled') return false;
-    if (o.status === 'delivered' && o.payment_status === 'paid') return false;
-    return true;
-  });
-  const pendingOrders = orders.filter((o) => o.status === 'pending');
-  const unpaidOrders = orders.filter((o) => o.payment_status !== 'paid' && o.status !== 'cancelled');
-  const overdueOrders = orders.filter((o) => {
+  // ── Buckets ──
+  const needsConfirmation = notCancelled.filter((o) => o.status === 'pending');
+  const needsShipping = notCancelled.filter((o) =>
+    o.status === 'confirmed' && (o.production_status === 'ready' || o.production_status === 'delivered') && o.status !== 'shipped' && o.status !== 'delivered'
+  );
+  const inProduction = notCancelled.filter((o) =>
+    o.production_status === 'in_production' && o.status !== 'shipped' && o.status !== 'delivered'
+  );
+  const overdueOrders = notCancelled.filter((o) => {
     if (!o.due_date) return false;
-    return new Date(o.due_date) < today && o.production_status !== 'delivered';
+    return new Date(o.due_date) < today && o.status !== 'delivered' && o.status !== 'shipped';
   });
+  const unpaidOrders = notCancelled.filter((o) => o.payment_status !== 'paid');
+  const activeOrdersList = notCancelled.filter((o) => !(o.status === 'delivered' && o.payment_status === 'paid'));
   const totalOutstanding = unpaidOrders.reduce((sum, o) => {
     const total = (o.order_items || []).reduce((s, item) => s + (item.products?.price || 0) * (item.quantity || 1), 0);
     const paid = o.amount_paid || 0;
     return sum + Math.max(0, total - paid);
   }, 0);
 
+  // Count urgency for stats
+  const urgentCount = needsConfirmation.length + needsShipping.length + changeRequests.length + overdueOrders.length;
+
+  // Reusable order row
+  const OrderRow = ({ order, extra, rightLabel }) => {
+    const itemCount = order.order_items?.length || 0;
+    const total = (order.order_items || []).reduce((s, i) => s + (i.products?.price || 0) * (i.quantity || 1), 0);
+    return (
+      <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer flex items-center gap-3" onClick={() => onGoToOrder(order.id)}>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-900 truncate">{order.clients?.name || 'Unknown'}</p>
+          <p className="text-xs text-gray-500">{itemCount} items · ${total.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {extra ? `· ${extra}` : ''}</p>
+        </div>
+        {rightLabel && <span className="text-xs font-medium shrink-0">{rightLabel}</span>}
+        <ChevronRightIcon className="h-4 w-4 text-gray-300 shrink-0" />
+      </div>
+    );
+  };
+
+  // Section component
+  const Section = ({ title, icon: Icon, count, color, border, bg, orders: sectionOrders, renderRow }) => {
+    if (!sectionOrders || sectionOrders.length === 0) return null;
+    return (
+      <div className={`rounded-xl bg-white border ${border} overflow-hidden`}>
+        <div className={`${bg} border-b ${border} px-4 py-3 flex items-center gap-2`}>
+          <Icon className={`h-5 w-5 ${color}`} />
+          <h3 className={`font-semibold text-sm ${color}`}>{title}</h3>
+          <span className={`ml-auto text-xs font-bold ${color} bg-white/60 rounded-full px-2 py-0.5`}>{count}</span>
+        </div>
+        <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+          {sectionOrders.map((o, i) => renderRow ? renderRow(o, i) : <OrderRow key={o.id} order={o} />)}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Quick stats cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl bg-white border border-gray-100 p-5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-500">Active Orders</p>
-            <ClipboardDocumentListIcon className="h-5 w-5 text-gray-400" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{activeOrdersList.length}</p>
+    <div className="space-y-5">
+      {/* Top stats */}
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+        <div className={`rounded-xl border p-4 ${urgentCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Needs Action</p>
+          <p className={`mt-1 text-2xl font-bold ${urgentCount > 0 ? 'text-red-600' : 'text-gray-900'}`}>{urgentCount}</p>
         </div>
-
-        <div className="rounded-xl bg-white border border-gray-100 p-5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-500">Unpaid Orders</p>
-            <BanknotesIcon className="h-5 w-5 text-gray-400" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{unpaidOrders.length}</p>
+        <div className="rounded-xl bg-white border border-gray-100 p-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Active Orders</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900">{activeOrdersList.length}</p>
         </div>
-
-        <div className="rounded-xl bg-white border border-gray-100 p-5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-500">Outstanding</p>
-            <BanknotesIcon className="h-5 w-5 text-amber-400" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-gray-900">${totalOutstanding.toFixed(2)}</p>
+        <div className="rounded-xl bg-white border border-gray-100 p-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Unpaid</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900">{unpaidOrders.length}</p>
         </div>
-
+        <div className="rounded-xl bg-white border border-gray-100 p-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Outstanding</p>
+          <p className="mt-1 text-2xl font-bold text-amber-600">${totalOutstanding.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
+        </div>
       </div>
 
-      {/* Action items */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* Urgent action sections */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Overdue */}
+        <Section
+          title="Overdue" icon={ExclamationTriangleIcon} count={overdueOrders.length}
+          color="text-red-700" border="border-red-200" bg="bg-red-50"
+          orders={overdueOrders}
+          renderRow={(o) => <OrderRow key={o.id} order={o} extra={`Due ${new Date(o.due_date).toLocaleDateString()}`} rightLabel={<span className="text-red-600">{Math.ceil((today - new Date(o.due_date)) / 86400000)}d late</span>} />}
+        />
 
-        {/* Overdue orders */}
-        {overdueOrders.length > 0 && (
-          <div className="rounded-xl bg-white border border-red-200 overflow-hidden">
-            <div className="bg-red-50 border-b border-red-200 px-5 py-3 flex items-center gap-2">
-              <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
-              <h3 className="font-semibold text-red-900">Overdue Orders ({overdueOrders.length})</h3>
-            </div>
-            <div className="divide-y divide-gray-100">
-              {overdueOrders.slice(0, 5).map((o) => (
-                <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onGoToOrder(o.id)}>
-                  <p className="text-sm font-medium text-gray-900">{o.clients?.name || 'Unknown'}</p>
-                  <p className="text-xs text-gray-500">Due: {new Date(o.due_date).toLocaleDateString()}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Needs confirmation */}
+        <Section
+          title="Needs Confirmation" icon={ClipboardDocumentListIcon} count={needsConfirmation.length}
+          color="text-blue-700" border="border-blue-200" bg="bg-blue-50"
+          orders={needsConfirmation}
+          renderRow={(o) => <OrderRow key={o.id} order={o} extra={new Date(o.created_at).toLocaleDateString()} />}
+        />
 
-
-        {/* Pending confirmation */}
-        {pendingOrders.length > 0 && (
-          <div className="rounded-xl bg-white border border-blue-200 overflow-hidden">
-            <div className="bg-blue-50 border-b border-blue-200 px-5 py-3 flex items-center gap-2">
-              <ClipboardDocumentListIcon className="h-5 w-5 text-blue-600" />
-              <h3 className="font-semibold text-blue-900">Pending Confirmation ({pendingOrders.length})</h3>
+        {/* Change requests */}
+        {changeRequests.length > 0 && (
+          <div className="rounded-xl bg-white border border-amber-200 overflow-hidden">
+            <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center gap-2">
+              <BellIcon className="h-5 w-5 text-amber-700" />
+              <h3 className="font-semibold text-sm text-amber-700">Change Requests</h3>
+              <span className="ml-auto text-xs font-bold text-amber-700 bg-white/60 rounded-full px-2 py-0.5">{changeRequests.length}</span>
             </div>
-            <div className="divide-y divide-gray-100">
-              {pendingOrders.slice(0, 5).map((o) => (
-                <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onGoToOrder(o.id)}>
-                  <p className="text-sm font-medium text-gray-900">{o.clients?.name || 'Unknown'}</p>
-                  <p className="text-xs text-gray-500">
-                    {o.order_items?.length || 0} items · {new Date(o.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Outstanding payments */}
-        {unpaidOrders.length > 0 && (
-          <div className="rounded-xl bg-white border border-green-200 overflow-hidden">
-            <div className="bg-green-50 border-b border-green-200 px-5 py-3 flex items-center gap-2">
-              <BanknotesIcon className="h-5 w-5 text-green-600" />
-              <h3 className="font-semibold text-green-900">Payment Pending ({unpaidOrders.length})</h3>
-            </div>
-            <div className="divide-y divide-gray-100">
-              {unpaidOrders.slice(0, 5).map((o) => {
-                const total = o.total_amount || 0;
-                const paid = o.amount_paid || 0;
-                const due = total - paid;
-                return (
-                  <div key={o.id} className="px-5 py-3 hover:bg-gray-50 cursor-pointer" onClick={() => onGoToOrder(o.id)}>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-gray-900">{o.clients?.name || 'Unknown'}</p>
-                      <p className="text-sm font-bold text-green-700">${due.toFixed(2)}</p>
-                    </div>
-                    <p className="text-xs text-gray-500">{o.payment_status || 'unpaid'}</p>
+            <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+              {changeRequests.map((cr) => (
+                <div key={cr.id} className="px-4 py-3 hover:bg-gray-50 cursor-pointer flex items-center gap-3" onClick={() => onGoToOrder(cr.order_id)}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{cr.orders?.clients?.name || 'Unknown'}</p>
+                    <p className="text-xs text-gray-500 truncate">{cr.message || cr.type || 'Change request'}</p>
                   </div>
-                );
-              })}
+                  <span className="text-xs text-amber-600 font-medium shrink-0">{new Date(cr.created_at).toLocaleDateString()}</span>
+                  <ChevronRightIcon className="h-4 w-4 text-gray-300 shrink-0" />
+                </div>
+              ))}
             </div>
           </div>
         )}
+
+        {/* Needs shipping */}
+        <Section
+          title="Ready to Ship" icon={CubeIcon} count={needsShipping.length}
+          color="text-purple-700" border="border-purple-200" bg="bg-purple-50"
+          orders={needsShipping}
+        />
       </div>
+
+      {/* Status sections */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* In production */}
+        <Section
+          title="In Production" icon={CubeIcon} count={inProduction.length}
+          color="text-indigo-700" border="border-indigo-200" bg="bg-indigo-50"
+          orders={inProduction}
+          renderRow={(o) => <OrderRow key={o.id} order={o} extra={o.due_date ? `Due ${new Date(o.due_date).toLocaleDateString()}` : ''} />}
+        />
+
+        {/* Payment pending */}
+        <Section
+          title="Payment Pending" icon={BanknotesIcon} count={unpaidOrders.length}
+          color="text-green-700" border="border-green-200" bg="bg-green-50"
+          orders={unpaidOrders}
+          renderRow={(o) => {
+            const total = (o.order_items || []).reduce((s, i) => s + (i.products?.price || 0) * (i.quantity || 1), 0);
+            const paid = o.amount_paid || 0;
+            const due = Math.max(0, total - paid);
+            return <OrderRow key={o.id} order={o} extra={o.payment_status === 'partial' ? 'Partial' : 'Unpaid'} rightLabel={<span className="text-green-700 font-bold">${due.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>} />;
+          }}
+        />
+      </div>
+
+      {/* All clear message */}
+      {urgentCount === 0 && (
+        <div className="text-center py-8">
+          <CheckCircleIcon className="h-12 w-12 text-green-400 mx-auto mb-2" />
+          <p className="text-gray-500">All caught up! No urgent items.</p>
+        </div>
+      )}
     </div>
   );
 }
