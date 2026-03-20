@@ -150,18 +150,21 @@ function TagEditor({ label, values, onChange, suggestions }) {
 function AnalyticsTab() {
   const [orders, setOrders] = useState([]);
   const [clients, setClients] = useState([]);
+  const [allWorkflow, setAllWorkflow] = useState([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('30'); // days
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [ordersData, clientsData] = await Promise.all([
+      const [ordersData, clientsData, wfData] = await Promise.all([
         fetchOrdersWithItemsFull(),
         fetchClients(),
+        fetchAllWorkflowSteps(),
       ]);
       setOrders(ordersData);
       setClients(clientsData);
+      setAllWorkflow(wfData || []);
     } catch (e) {
       console.error('Analytics load error:', e);
     } finally {
@@ -338,6 +341,79 @@ function AnalyticsTab() {
         )}
 
       </div>
+
+      {/* Workflow Analytics */}
+      {(() => {
+        const WF_KEYS = ['order_confirmed','factory_file_ready','sent_to_production','in_production','qc_passed','packed'];
+        const WF_LABELS = { order_confirmed: 'Confirmed', factory_file_ready: 'File Ready', sent_to_production: 'To Production', in_production: 'In Production', qc_passed: 'QC Passed', packed: 'Packed' };
+        // Group workflow steps by order
+        const byOrder = {};
+        allWorkflow.forEach((s) => {
+          if (!byOrder[s.order_id]) byOrder[s.order_id] = {};
+          byOrder[s.order_id][s.step_key] = s;
+        });
+        // Calculate avg time between consecutive steps
+        const pairTimes = {};
+        for (let i = 1; i < WF_KEYS.length; i++) {
+          const key = `${WF_KEYS[i - 1]}→${WF_KEYS[i]}`;
+          pairTimes[key] = { label: `${WF_LABELS[WF_KEYS[i - 1]]} → ${WF_LABELS[WF_KEYS[i]]}`, times: [] };
+        }
+        Object.values(byOrder).forEach((steps) => {
+          for (let i = 1; i < WF_KEYS.length; i++) {
+            const prev = steps[WF_KEYS[i - 1]];
+            const curr = steps[WF_KEYS[i]];
+            if (prev?.completed_at && curr?.completed_at) {
+              const diff = (new Date(curr.completed_at) - new Date(prev.completed_at)) / 3600000;
+              if (diff > 0) pairTimes[`${WF_KEYS[i - 1]}→${WF_KEYS[i]}`].times.push(diff);
+            }
+          }
+        });
+        // Also total order → packed time
+        const totalTimes = [];
+        Object.values(byOrder).forEach((steps) => {
+          const first = steps[WF_KEYS[0]];
+          const last = steps[WF_KEYS[WF_KEYS.length - 1]];
+          if (first?.completed_at && last?.completed_at) {
+            totalTimes.push((new Date(last.completed_at) - new Date(first.completed_at)) / 3600000);
+          }
+        });
+        const pairs = Object.values(pairTimes).filter((p) => p.times.length > 0);
+        if (pairs.length === 0 && totalTimes.length === 0) return null;
+        const fmtH = (h) => h < 24 ? `${Math.round(h)}h` : `${(h / 24).toFixed(1)}d`;
+        const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+        return (
+          <div className="rounded-xl bg-white border border-gray-100 overflow-hidden">
+            <div className="border-b border-gray-100 px-5 py-3">
+              <h3 className="font-semibold text-gray-900">Production Speed</h3>
+              <p className="text-xs text-gray-400">Average time between workflow steps across all orders</p>
+            </div>
+            <div className="p-5 space-y-3">
+              {totalTimes.length > 0 && (
+                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                  <span className="text-sm font-medium text-blue-700">Total: Confirmed → Packed</span>
+                  <span className="text-sm font-bold text-blue-700">{fmtH(avg(totalTimes))} avg ({totalTimes.length} orders)</span>
+                </div>
+              )}
+              {pairs.map((p) => {
+                const a = avg(p.times);
+                const maxBar = Math.max(...pairs.map((pp) => avg(pp.times)));
+                const pct = maxBar > 0 ? (a / maxBar) * 100 : 0;
+                return (
+                  <div key={p.label}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-gray-600">{p.label}</span>
+                      <span className={`text-xs font-medium ${a > 48 ? 'text-amber-600' : 'text-gray-600'}`}>{fmtH(a)} avg ({p.times.length})</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${a > 48 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
@@ -2673,13 +2749,19 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
               <div className="p-4 border-b border-gray-100 bg-white space-y-3">
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Production Workflow</span>
                 {(() => {
+                  const clientName = selectedOrder.clients?.name || 'Client';
                   const WORKFLOW_STEPS = [
-                    { key: 'order_confirmed', label: 'Order Confirmed', desc: 'Client confirmed, order is a go' },
-                    { key: 'factory_file_ready', label: 'Factory File Ready', desc: 'Production file prepared & uploaded' },
-                    { key: 'sent_to_production', label: 'Sent to Production', desc: 'File sent to factory / workers' },
-                    { key: 'in_production', label: 'In Production', desc: 'Factory is working on it' },
-                    { key: 'qc_passed', label: 'QC Passed', desc: 'Quality check completed' },
-                    { key: 'packed', label: 'Packed', desc: 'Order packed and ready to ship' },
+                    { key: 'order_confirmed', label: 'Order Confirmed', desc: 'Client confirmed, order is a go',
+                      msg: `Hi ${clientName}! Your order #${selectedOrder.id} has been confirmed and we're getting started. We'll keep you updated!` },
+                    { key: 'factory_file_ready', label: 'Factory File Ready', desc: 'Production file prepared & uploaded', msg: null },
+                    { key: 'sent_to_production', label: 'Sent to Production', desc: 'File sent to factory / workers',
+                      msg: `Hi ${clientName}! Your order #${selectedOrder.id} has been sent to production. We'll let you know once it's ready!` },
+                    { key: 'in_production', label: 'In Production', desc: 'Factory is working on it',
+                      msg: `Hi ${clientName}! Just an update — your order #${selectedOrder.id} is currently in production. Everything is on track!` },
+                    { key: 'qc_passed', label: 'QC Passed', desc: 'Quality check completed',
+                      msg: `Hi ${clientName}! Great news — your order #${selectedOrder.id} passed quality control and looks perfect!` },
+                    { key: 'packed', label: 'Packed', desc: 'Order packed and ready to ship',
+                      msg: `Hi ${clientName}! Your order #${selectedOrder.id} is packed and ready to ship! We'll send tracking info shortly.` },
                   ];
                   const stepsMap = {};
                   workflowSteps.forEach((s) => { stepsMap[s.step_key] = s; });
@@ -2701,6 +2783,21 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
                     } catch (e) { console.error('Workflow step error:', e); }
                   }
 
+                  async function saveStepNote(stepKey, note) {
+                    try {
+                      await upsertWorkflowStep(selectedOrder.id, stepKey, { notes: note });
+                      setWorkflowSteps((prev) => {
+                        const existing = prev.find((s) => s.step_key === stepKey);
+                        if (existing) return prev.map((s) => s.step_key === stepKey ? { ...s, notes: note } : s);
+                        return [...prev, { step_key: stepKey, completed: false, notes: note, order_id: selectedOrder.id }];
+                      });
+                    } catch (e) { console.error('Note save error:', e); }
+                  }
+
+                  function copyMsg(text) {
+                    navigator.clipboard.writeText(text).catch(() => {});
+                  }
+
                   async function handleFileUpload(e) {
                     const file = e.target.files?.[0];
                     if (!file) return;
@@ -2720,8 +2817,88 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
                     } catch (e) { alert('Delete failed'); }
                   }
 
+                  function generateFactorySheet() {
+                    const items = orderDetail?.items || selectedOrder.order_items || [];
+                    const grouped = {};
+                    items.forEach((item) => {
+                      const key = item.products?.name || 'Unknown';
+                      if (!grouped[key]) grouped[key] = { name: key, image: item.products?.image_url, items: [] };
+                      grouped[key].items.push(item);
+                    });
+                    const w = window.open('', '_blank');
+                    if (!w) return;
+                    w.document.write(`<!DOCTYPE html><html><head><title>Factory Sheet - Order #${selectedOrder.id}</title>
+                      <style>
+                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                        body { font-family: Arial, sans-serif; padding: 40px; max-width: 8.5in; margin: 0 auto; }
+                        .header { border-bottom: 3px solid #111; padding-bottom: 16px; margin-bottom: 24px; }
+                        .header h1 { font-size: 24px; margin-bottom: 8px; }
+                        .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 13px; }
+                        .product { border: 2px solid #333; border-radius: 8px; padding: 16px; margin-bottom: 16px; page-break-inside: avoid; }
+                        .product h2 { font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 8px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+                        .product h2 img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
+                        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        th { background: #f5f5f5; }
+                        .check { width: 28px; height: 28px; border: 2px solid #999; border-radius: 4px; margin: 0 auto; display: block; }
+                        .subtotal { text-align: right; font-weight: bold; margin-top: 8px; font-size: 13px; }
+                        .notes-row td { height: 40px; }
+                        .footer { margin-top: 24px; border-top: 2px solid #111; padding-top: 12px; font-size: 12px; }
+                        .editable { border: 1px dashed #aaa; min-height: 24px; padding: 4px 6px; font-size: 12px; }
+                        @media print { .no-print { display: none !important; } }
+                      </style></head><body>
+                      <div class="header">
+                        <h1>PRODUCTION ORDER #${selectedOrder.id}</h1>
+                        <div class="meta">
+                          <div><strong>Client:</strong> ${clientName}</div>
+                          <div><strong>Due:</strong> ${selectedOrder.due_date ? new Date(selectedOrder.due_date).toLocaleDateString() : 'Not set'}</div>
+                          <div><strong>Date:</strong> ${new Date().toLocaleDateString()}</div>
+                          <div><strong>Total Items:</strong> ${items.reduce((s, i) => s + (i.quantity || 0), 0)} pcs</div>
+                        </div>
+                        <div style="margin-top:8px"><strong>Special Instructions:</strong> <span class="editable" contenteditable="true">${selectedOrder.admin_notes || 'Click to add...'}</span></div>
+                      </div>
+                      ${Object.values(grouped).map((g) => `
+                        <div class="product">
+                          <h2>${g.image ? `<img src="${g.image}" />` : ''}${g.name}</h2>
+                          <table>
+                            <thead><tr><th>Qty</th><th>Plating</th><th>Stone</th><th>Notes</th><th style="width:50px;text-align:center">Done</th></tr></thead>
+                            <tbody>
+                              ${g.items.map((i) => `<tr>
+                                <td style="font-weight:bold;font-size:16px">${i.quantity || 1}</td>
+                                <td>${i.plating || '—'}</td>
+                                <td>${i.stone_color || '—'}</td>
+                                <td><span class="editable" contenteditable="true">${i.notes || ''}</span></td>
+                                <td><div class="check"></div></td>
+                              </tr>`).join('')}
+                              <tr class="notes-row"><td colspan="5"><strong>Product Notes:</strong> <span class="editable" contenteditable="true">Click to add notes...</span></td></tr>
+                            </tbody>
+                          </table>
+                          <div class="subtotal">Subtotal: ${g.items.reduce((s, i) => s + (i.quantity || 0), 0)} pcs</div>
+                        </div>
+                      `).join('')}
+                      ${selectedOrder.notes ? `<div class="footer"><strong>Client Notes:</strong> ${selectedOrder.notes}</div>` : ''}
+                      <div class="no-print" style="margin-top:24px;display:flex;gap:12px">
+                        <button onclick="window.print()" style="background:#111;color:#fff;padding:10px 24px;border:none;border-radius:8px;font-size:14px;cursor:pointer">Print / Save PDF</button>
+                        <button onclick="window.close()" style="padding:10px 24px;border:1px solid #ccc;border-radius:8px;font-size:14px;cursor:pointer">Close</button>
+                      </div>
+                    </body></html>`);
+                    w.document.close();
+                  }
+
                   const completedCount = WORKFLOW_STEPS.filter((s) => stepsMap[s.key]?.completed).length;
                   const progress = Math.round((completedCount / WORKFLOW_STEPS.length) * 100);
+
+                  // Time between steps
+                  const stepTimes = [];
+                  for (let i = 1; i < WORKFLOW_STEPS.length; i++) {
+                    const prev = stepsMap[WORKFLOW_STEPS[i - 1].key];
+                    const curr = stepsMap[WORKFLOW_STEPS[i].key];
+                    if (prev?.completed_at && curr?.completed_at) {
+                      const diff = new Date(curr.completed_at) - new Date(prev.completed_at);
+                      const hours = Math.round(diff / 3600000);
+                      stepTimes.push({ from: WORKFLOW_STEPS[i - 1].label, to: WORKFLOW_STEPS[i].label, hours });
+                    }
+                  }
 
                   return (
                     <>
@@ -2739,67 +2916,92 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
                           const data = stepsMap[step.key];
                           const done = data?.completed;
                           const isCurrent = idx === firstIncomplete;
+                          const hasNote = data?.notes;
                           return (
-                            <div key={step.key}
-                              className={`flex items-start gap-2.5 p-2 rounded-lg cursor-pointer transition-colors ${
-                                done ? 'bg-green-50 hover:bg-green-100' :
-                                isCurrent ? 'bg-blue-50 hover:bg-blue-100 ring-1 ring-blue-200' :
-                                'hover:bg-gray-50'
-                              }`}
-                              onClick={() => toggleStep(step.key, done)}
-                            >
-                              <div className={`mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                                done ? 'bg-green-500 border-green-500' :
-                                isCurrent ? 'border-blue-400' : 'border-gray-300'
-                              }`}>
-                                {done && <CheckCircleIcon className="h-4 w-4 text-white" />}
+                            <div key={step.key} className={`rounded-lg transition-colors ${
+                              done ? 'bg-green-50' : isCurrent ? 'bg-blue-50 ring-1 ring-blue-200' : ''
+                            }`}>
+                              <div className={`flex items-start gap-2.5 p-2 cursor-pointer ${done ? 'hover:bg-green-100' : isCurrent ? 'hover:bg-blue-100' : 'hover:bg-gray-50'}`}
+                                onClick={() => toggleStep(step.key, done)}
+                              >
+                                <div className={`mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                  done ? 'bg-green-500 border-green-500' : isCurrent ? 'border-blue-400' : 'border-gray-300'
+                                }`}>
+                                  {done && <CheckCircleIcon className="h-4 w-4 text-white" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium ${done ? 'text-green-700 line-through' : isCurrent ? 'text-blue-700' : 'text-gray-600'}`}>
+                                    {step.label}
+                                  </p>
+                                  <p className="text-xs text-gray-400">{step.desc}</p>
+                                  {done && data?.completed_at && (
+                                    <p className="text-xs text-green-600 mt-0.5">{new Date(data.completed_at).toLocaleDateString()} {new Date(data.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                  )}
+                                  {hasNote && <p className="text-xs text-gray-500 mt-0.5 italic">Note: {data.notes}</p>}
+                                </div>
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <p className={`text-sm font-medium ${done ? 'text-green-700 line-through' : isCurrent ? 'text-blue-700' : 'text-gray-600'}`}>
-                                  {step.label}
-                                </p>
-                                <p className="text-xs text-gray-400">{step.desc}</p>
-                                {done && data?.completed_at && (
-                                  <p className="text-xs text-green-600 mt-0.5">{new Date(data.completed_at).toLocaleDateString()} {new Date(data.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                )}
-                              </div>
+                              {/* Note input + message suggestion — show for completed or current step */}
+                              {(done || isCurrent) && (
+                                <div className="px-2 pb-2 pl-9 space-y-1.5">
+                                  <input type="text" placeholder="Add a note..." defaultValue={data?.notes || ''}
+                                    onBlur={(e) => { if (e.target.value !== (data?.notes || '')) saveStepNote(step.key, e.target.value); }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.target.blur(); } }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-300 bg-white/80" />
+                                  {done && step.msg && (
+                                    <button onClick={(e) => { e.stopPropagation(); copyMsg(step.msg); }}
+                                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 px-1">
+                                      <ClipboardDocumentListIcon className="h-3.5 w-3.5" /> Copy update message
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
                       </div>
 
+                      {/* Time tracking between steps */}
+                      {stepTimes.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-gray-100">
+                          <p className="text-xs font-semibold text-gray-400 mb-1">Step timing</p>
+                          <div className="space-y-0.5">
+                            {stepTimes.map((t, i) => (
+                              <div key={i} className="flex items-center justify-between text-xs">
+                                <span className="text-gray-500">{t.from} → {t.to}</span>
+                                <span className={`font-medium ${t.hours > 48 ? 'text-amber-600' : 'text-gray-600'}`}>{t.hours < 24 ? `${t.hours}h` : `${Math.round(t.hours / 24)}d`}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Factory Files */}
                       <div className="mt-3 pt-3 border-t border-gray-100">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-semibold text-gray-500">Factory Files</span>
-                          <label className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg cursor-pointer transition-colors ${uploadingFile ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
-                            <PlusIcon className="h-3.5 w-3.5" />
-                            {uploadingFile ? 'Uploading...' : 'Upload'}
-                            <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploadingFile} accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx" />
-                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={generateFactorySheet}
+                              className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
+                              Generate
+                            </button>
+                            <label className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg cursor-pointer transition-colors ${uploadingFile ? 'bg-gray-100 text-gray-400' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                              <PlusIcon className="h-3.5 w-3.5" />
+                              {uploadingFile ? 'Uploading...' : 'Upload'}
+                              <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploadingFile} accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx" />
+                            </label>
+                          </div>
                         </div>
                         {orderFiles.filter((f) => f.file_type === 'factory_sheet').length === 0 && (
                           <p className="text-xs text-amber-500 italic">No factory file uploaded yet</p>
                         )}
                         <div className="space-y-1.5">
-                          {orderFiles.filter((f) => f.file_type === 'factory_sheet').map((f) => (
+                          {orderFiles.map((f) => (
                             <div key={f.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg group">
                               <a href={f.file_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 text-xs font-medium text-blue-600 hover:underline truncate">
                                 {f.file_name}
                               </a>
                               <span className="text-xs text-gray-400 shrink-0">{new Date(f.created_at).toLocaleDateString()}</span>
-                              <button onClick={() => handleDeleteFile(f.id)} className="text-gray-300 hover:text-red-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <TrashIcon className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                          {/* Also show other file types if any */}
-                          {orderFiles.filter((f) => f.file_type !== 'factory_sheet').map((f) => (
-                            <div key={f.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg group">
-                              <a href={f.file_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0 text-xs font-medium text-blue-600 hover:underline truncate">
-                                {f.file_name}
-                              </a>
-                              <span className="text-xs text-gray-400 shrink-0">{f.file_type}</span>
                               <button onClick={() => handleDeleteFile(f.id)} className="text-gray-300 hover:text-red-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <TrashIcon className="h-3.5 w-3.5" />
                               </button>
