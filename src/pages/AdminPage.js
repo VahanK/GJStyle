@@ -2177,6 +2177,26 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
     setChangeRequests(reqs || []);
     setWorkflowSteps(wfSteps || []);
     setOrderFiles(files || []);
+
+    // Auto-sync auto-checkable workflow steps to DB
+    const stepsMap = {};
+    (wfSteps || []).forEach((s) => { stepsMap[s.step_key] = s; });
+    const isConfirmed = order.status !== 'pending' && order.status !== 'cancelled';
+    const hasFile = (files || []).some((f) => f.file_type === 'factory_sheet');
+    const isShipped = order.status === 'shipped' || order.status === 'delivered';
+    const autoChecks = [
+      { key: 'order_confirmed', done: isConfirmed },
+      { key: 'factory_file_ready', done: hasFile },
+      { key: 'packed', done: isShipped },
+    ];
+    for (const ac of autoChecks) {
+      const existing = stepsMap[ac.key];
+      if (ac.done && !existing?.completed) {
+        upsertWorkflowStep(order.id, ac.key, { completed: true, completed_at: new Date().toISOString(), completed_by: 'system' }).catch(() => {});
+      } else if (!ac.done && existing?.completed) {
+        upsertWorkflowStep(order.id, ac.key, { completed: false, completed_at: null, completed_by: null }).catch(() => {});
+      }
+    }
   }
 
   function closeDetail() {
@@ -2750,24 +2770,40 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Production Workflow</span>
                 {(() => {
                   const clientName = selectedOrder.clients?.name || 'Client';
+                  const hasFactoryFile = orderFiles.some((f) => f.file_type === 'factory_sheet');
+                  const isConfirmed = orderDetail.status !== 'pending' && orderDetail.status !== 'cancelled';
+                  const isShipped = orderDetail.status === 'shipped' || orderDetail.status === 'delivered';
+
+                  // Steps: auto = derived from data, manual = toggled by user
                   const WORKFLOW_STEPS = [
-                    { key: 'order_confirmed', label: 'Order Confirmed', desc: 'Client confirmed, order is a go',
-                      msg: `Hi ${clientName}! Your order #${selectedOrder.id} has been confirmed and we're getting started. We'll keep you updated!` },
-                    { key: 'factory_file_ready', label: 'Factory File Ready', desc: 'Production file prepared & uploaded', msg: null },
-                    { key: 'sent_to_production', label: 'Sent to Production', desc: 'File sent to factory / workers',
-                      msg: `Hi ${clientName}! Your order #${selectedOrder.id} has been sent to production. We'll let you know once it's ready!` },
-                    { key: 'in_production', label: 'In Production', desc: 'Factory is working on it',
-                      msg: `Hi ${clientName}! Just an update — your order #${selectedOrder.id} is currently in production. Everything is on track!` },
+                    { key: 'order_confirmed', label: 'Order Confirmed', desc: 'Order status set to confirmed', auto: true, check: () => isConfirmed,
+                      msg: `Hi ${clientName}! Your order #${selectedOrder.id} has been confirmed and we're getting started!` },
+                    { key: 'factory_file_ready', label: 'Factory File Ready', desc: 'Production file uploaded', auto: true, check: () => hasFactoryFile, msg: null },
+                    { key: 'sent_to_production', label: 'Sent to Production', desc: 'Basket handed off to factory',
+                      msg: `Hi ${clientName}! Your order #${selectedOrder.id} has been sent to production!` },
+                    { key: 'production_complete', label: 'Production Complete', desc: 'Basket back from factory',
+                      msg: `Hi ${clientName}! Production on your order #${selectedOrder.id} is complete! Moving to finishing.` },
+                    { key: 'finishing', label: 'Finishing', desc: 'Stone gluing, cleaning, final touches',
+                      msg: `Hi ${clientName}! Your order #${selectedOrder.id} is in final finishing stage!` },
                     { key: 'qc_passed', label: 'QC Passed', desc: 'Quality check completed',
-                      msg: `Hi ${clientName}! Great news — your order #${selectedOrder.id} passed quality control and looks perfect!` },
-                    { key: 'packed', label: 'Packed', desc: 'Order packed and ready to ship',
-                      msg: `Hi ${clientName}! Your order #${selectedOrder.id} is packed and ready to ship! We'll send tracking info shortly.` },
+                      msg: `Hi ${clientName}! Your order #${selectedOrder.id} passed quality control!` },
+                    { key: 'packed', label: 'Packed & Ready', desc: 'Ready to ship', auto: true, check: () => isShipped,
+                      msg: `Hi ${clientName}! Your order #${selectedOrder.id} is packed and ready to ship!` },
                   ];
+
                   const stepsMap = {};
                   workflowSteps.forEach((s) => { stepsMap[s.step_key] = s; });
-                  const firstIncomplete = WORKFLOW_STEPS.findIndex((s) => !stepsMap[s.key]?.completed);
 
-                  async function toggleStep(stepKey, currentlyCompleted) {
+                  // Determine completion for each step
+                  const stepStatuses = WORKFLOW_STEPS.map((step) => {
+                    if (step.auto) return { ...step, done: step.check() };
+                    return { ...step, done: stepsMap[step.key]?.completed || false };
+                  });
+                  const completedCount = stepStatuses.filter((s) => s.done).length;
+                  const progress = Math.round((completedCount / WORKFLOW_STEPS.length) * 100);
+                  const firstIncomplete = stepStatuses.findIndex((s) => !s.done);
+
+                  async function toggleManualStep(stepKey, currentlyCompleted) {
                     const newVal = !currentlyCompleted;
                     try {
                       await upsertWorkflowStep(selectedOrder.id, stepKey, {
@@ -2885,18 +2921,16 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
                     w.document.close();
                   }
 
-                  const completedCount = WORKFLOW_STEPS.filter((s) => stepsMap[s.key]?.completed).length;
-                  const progress = Math.round((completedCount / WORKFLOW_STEPS.length) * 100);
-
-                  // Time between steps
+                  // Time between completed manual steps
                   const stepTimes = [];
-                  for (let i = 1; i < WORKFLOW_STEPS.length; i++) {
-                    const prev = stepsMap[WORKFLOW_STEPS[i - 1].key];
-                    const curr = stepsMap[WORKFLOW_STEPS[i].key];
-                    if (prev?.completed_at && curr?.completed_at) {
-                      const diff = new Date(curr.completed_at) - new Date(prev.completed_at);
+                  const allKeys = WORKFLOW_STEPS.map((s) => s.key);
+                  for (let i = 1; i < allKeys.length; i++) {
+                    const prevData = stepsMap[allKeys[i - 1]];
+                    const currData = stepsMap[allKeys[i]];
+                    if (prevData?.completed_at && currData?.completed_at) {
+                      const diff = new Date(currData.completed_at) - new Date(prevData.completed_at);
                       const hours = Math.round(diff / 3600000);
-                      stepTimes.push({ from: WORKFLOW_STEPS[i - 1].label, to: WORKFLOW_STEPS[i].label, hours });
+                      if (hours > 0) stepTimes.push({ from: WORKFLOW_STEPS[i - 1].label, to: WORKFLOW_STEPS[i].label, hours });
                     }
                   }
 
@@ -2912,48 +2946,55 @@ function OrdersTab({ focusOrderId, onFocusHandled }) {
 
                       {/* Steps */}
                       <div className="space-y-1">
-                        {WORKFLOW_STEPS.map((step, idx) => {
+                        {stepStatuses.map((step, idx) => {
                           const data = stepsMap[step.key];
-                          const done = data?.completed;
+                          const done = step.done;
+                          const isAuto = step.auto;
                           const isCurrent = idx === firstIncomplete;
-                          const hasNote = data?.notes;
                           return (
                             <div key={step.key} className={`rounded-lg transition-colors ${
                               done ? 'bg-green-50' : isCurrent ? 'bg-blue-50 ring-1 ring-blue-200' : ''
                             }`}>
-                              <div className={`flex items-start gap-2.5 p-2 cursor-pointer ${done ? 'hover:bg-green-100' : isCurrent ? 'hover:bg-blue-100' : 'hover:bg-gray-50'}`}
-                                onClick={() => toggleStep(step.key, done)}
+                              <div className={`flex items-start gap-2.5 p-2 ${!isAuto ? 'cursor-pointer' : ''} ${done ? 'hover:bg-green-100' : isCurrent && !isAuto ? 'hover:bg-blue-100' : !isAuto ? 'hover:bg-gray-50' : ''}`}
+                                onClick={() => { if (!isAuto) toggleManualStep(step.key, done); }}
                               >
                                 <div className={`mt-0.5 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                                  done ? 'bg-green-500 border-green-500' : isCurrent ? 'border-blue-400' : 'border-gray-300'
+                                  done ? 'bg-green-500 border-green-500' :
+                                  isCurrent ? 'border-blue-400' : 'border-gray-300'
                                 }`}>
                                   {done && <CheckCircleIcon className="h-4 w-4 text-white" />}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-medium ${done ? 'text-green-700 line-through' : isCurrent ? 'text-blue-700' : 'text-gray-600'}`}>
-                                    {step.label}
-                                  </p>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className={`text-sm font-medium ${done ? 'text-green-700 line-through' : isCurrent ? 'text-blue-700' : 'text-gray-600'}`}>
+                                      {step.label}
+                                    </p>
+                                    {isAuto && <span className="text-xs text-gray-300 italic">auto</span>}
+                                  </div>
                                   <p className="text-xs text-gray-400">{step.desc}</p>
                                   {done && data?.completed_at && (
                                     <p className="text-xs text-green-600 mt-0.5">{new Date(data.completed_at).toLocaleDateString()} {new Date(data.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                   )}
-                                  {hasNote && <p className="text-xs text-gray-500 mt-0.5 italic">Note: {data.notes}</p>}
+                                  {data?.notes && <p className="text-xs text-gray-500 mt-0.5 italic">Note: {data.notes}</p>}
                                 </div>
                               </div>
-                              {/* Note input + message suggestion — show for completed or current step */}
-                              {(done || isCurrent) && (
+                              {/* Note input + message — show for done or current manual steps */}
+                              {(done || isCurrent) && !isAuto && (
                                 <div className="px-2 pb-2 pl-9 space-y-1.5">
                                   <input type="text" placeholder="Add a note..." defaultValue={data?.notes || ''}
                                     onBlur={(e) => { if (e.target.value !== (data?.notes || '')) saveStepNote(step.key, e.target.value); }}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.target.blur(); } }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
                                     onClick={(e) => e.stopPropagation()}
                                     className="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-300 bg-white/80" />
-                                  {done && step.msg && (
-                                    <button onClick={(e) => { e.stopPropagation(); copyMsg(step.msg); }}
-                                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 px-1">
-                                      <ClipboardDocumentListIcon className="h-3.5 w-3.5" /> Copy update message
-                                    </button>
-                                  )}
+                                </div>
+                              )}
+                              {/* Message suggestion for completed steps */}
+                              {done && step.msg && (
+                                <div className="px-2 pb-2 pl-9">
+                                  <button onClick={(e) => { e.stopPropagation(); copyMsg(step.msg); }}
+                                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 px-1">
+                                    <ClipboardDocumentListIcon className="h-3.5 w-3.5" /> Copy update message
+                                  </button>
                                 </div>
                               )}
                             </div>
