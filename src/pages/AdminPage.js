@@ -1320,6 +1320,8 @@ function ProductsTab() {
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('All');
   const [missingOnly, setMissingOnly] = useState(false);
+  const [missingPriceOnly, setMissingPriceOnly] = useState(false);
+  const [missingStonesOnly, setMissingStonesOnly] = useState(false);
   const [productTab, setProductTab] = useState('all'); // 'all' | 'deleted' | 'variants'
   const [editing, setEditing] = useState(null);
   const [editingIndex, setEditingIndex] = useState(null);
@@ -1355,7 +1357,9 @@ function ProductsTab() {
       const matchCat = catFilter === 'All' || p.category === catFilter;
       const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
       const matchMissing = !missingOnly || isMissing(p);
-      return matchCat && matchSearch && matchMissing;
+      const matchMissingPrice = !missingPriceOnly || !p.price;
+      const matchMissingStones = !missingStonesOnly || (needsStones(p) && !(p.stones?.length));
+      return matchCat && matchSearch && matchMissing && matchMissingPrice && matchMissingStones;
     }).sort((a, b) => {
       // More missing data = higher priority (shown first)
       const score = (p) => {
@@ -1370,6 +1374,8 @@ function ProductsTab() {
   })();
 
   const missingCount = products.filter((p) => !p.deleted_at && !p.parent_id && isMissing(p)).length;
+  const missingPriceCount = products.filter((p) => !p.deleted_at && !p.parent_id && !p.price).length;
+  const missingStonesCount = products.filter((p) => !p.deleted_at && !p.parent_id && needsStones(p) && !(p.stones?.length)).length;
   const deletedCount = products.filter((p) => !!p.deleted_at && !p.parent_id).length;
   const variantsCount = products.filter((p) => !!p.parent_id).length;
   const categories = ['All', ...Array.from(new Set(products.filter(p => !p.deleted_at).map((p) => p.category))).sort()];
@@ -1427,7 +1433,9 @@ function ProductsTab() {
           const matchCat = catFilter === 'All' || p.category === catFilter;
           const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
           const matchMissing = !missingOnly || !p.price || !(p.plating?.length) || (needsStones(p) && !(p.stones?.length));
-          return matchCat && matchSearch && matchMissing;
+          const matchMissingPrice = !missingPriceOnly || !p.price;
+          const matchMissingStones = !missingStonesOnly || (needsStones(p) && !(p.stones?.length));
+          return matchCat && matchSearch && matchMissing && matchMissingPrice && matchMissingStones;
         });
         const nextP = updatedFiltered[editingIndex + 1] || updatedFiltered[editingIndex];
         if (nextP) openEdit(nextP, editingIndex + 1 < updatedFiltered.length ? editingIndex + 1 : editingIndex);
@@ -1503,10 +1511,20 @@ function ProductsTab() {
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none">
               {categories.map((c) => <option key={c}>{c}</option>)}
             </select>
-            <button onClick={() => setMissingOnly((v) => !v)}
+            <button onClick={() => { setMissingOnly((v) => !v); setMissingPriceOnly(false); setMissingStonesOnly(false); }}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${missingOnly ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-600 border-amber-300 hover:bg-amber-50'}`}>
-              ⚠ Missing data ({missingCount})
+              ⚠ All missing ({missingCount})
             </button>
+            <button onClick={() => { setMissingPriceOnly((v) => !v); setMissingOnly(false); setMissingStonesOnly(false); }}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${missingPriceOnly ? 'bg-red-500 text-white border-red-500' : 'bg-white text-red-500 border-red-200 hover:bg-red-50'}`}>
+              $ No price ({missingPriceCount})
+            </button>
+            {missingStonesCount > 0 && (
+              <button onClick={() => { setMissingStonesOnly((v) => !v); setMissingOnly(false); setMissingPriceOnly(false); }}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${missingStonesOnly ? 'bg-violet-500 text-white border-violet-500' : 'bg-white text-violet-600 border-violet-200 hover:bg-violet-50'}`}>
+                💎 No stones ({missingStonesCount})
+              </button>
+            )}
             <span className="text-sm text-gray-400">{filtered.length} products</span>
           </div>
         )}
